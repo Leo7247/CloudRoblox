@@ -10,34 +10,84 @@ html, body {
   margin: 0;
   padding: 0;
   width: 100%;
-  height: 100%;
+  height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
-  background: #090b10;
+  background: #07090e;
   color: #f4f6fb;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
 }
 
 .hidden { display: none !important; }
 
-.lobby {
+.screen {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
+  height: 100dvh;
   padding: 20px;
-  background: radial-gradient(circle at top, #182238 0%, #090b10 70%);
+  background: radial-gradient(circle at top, #16223b 0%, #07090e 72%);
 }
 
 .card {
   width: 100%;
   max-width: 440px;
-  background: rgba(20, 25, 38, 0.92);
+  background: rgba(18, 23, 36, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
+  border-radius: 22px;
   padding: 28px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.7);
+}
+
+.top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rig-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+}
+
+.rig-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #eab308;
+}
+
+.rig-pill.online { color: #4ade80; background: rgba(34, 197, 94, 0.14); }
+.rig-pill.online .rig-dot { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+.rig-pill.offline { color: #f87171; background: rgba(239, 68, 68, 0.14); }
+.rig-pill.offline .rig-dot { background: #ef4444; }
+
+.offline-card {
+  text-align: center;
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+.offline-icon {
+  width: 62px;
+  height: 62px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .badge {
@@ -51,8 +101,13 @@ html, body {
   border-radius: 999px;
 }
 
-h1 { margin: 10px 0 4px; font-size: 28px; }
-.sub { margin: 0 0 20px; color: #94a3b8; font-size: 14px; }
+.offline-badge {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.14);
+}
+
+h1 { margin: 12px 0 6px; font-size: 26px; }
+.sub { margin: 0 0 20px; color: #94a3b8; font-size: 14px; line-height: 1.45; }
 
 label {
   display: block;
@@ -62,23 +117,18 @@ label {
   margin-bottom: 6px;
 }
 
+/* 16px prevents iPad/iPhone Safari from zooming when focusing inputs */
 input, select {
   width: 100%;
   padding: 12px 14px;
   margin-bottom: 14px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
-  background: #0f1420;
+  background: #0d121d;
   color: #fff;
-  font-size: 15px;
+  font-size: 16px;
   -webkit-user-select: text;
   user-select: text;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 12px;
 }
 
 .primary-btn {
@@ -94,6 +144,24 @@ input, select {
   cursor: pointer;
 }
 
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  width: 100%;
+  padding: 13px;
+  margin-top: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
 .status {
   margin: 12px 0 0;
   font-size: 13px;
@@ -102,6 +170,8 @@ input, select {
   text-align: center;
 }
 
+.status.info { color: #38bdf8; }
+
 .tip {
   margin: 14px 0 0;
   font-size: 12px;
@@ -109,9 +179,19 @@ input, select {
   line-height: 1.4;
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
+}
+
+.shake { animation: shake 0.25s ease-in-out 2; }
+
 .stream-container {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100dvh;
   background: #000;
 }
 
@@ -135,18 +215,25 @@ input, select {
   top: max(10px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
-  z-index: 20;
+  z-index: 25;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(15, 20, 32, 0.68);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(12, 16, 26, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.14);
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.hud-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .hud-pill .dot {
@@ -159,8 +246,8 @@ input, select {
 
 .hud-pill .sep { color: rgba(255, 255, 255, 0.25); }
 
-.hud-pill button {
-  background: rgba(255, 255, 255, 0.1);
+.icon-btn {
+  background: rgba(255, 255, 255, 0.11);
   border: none;
   color: #fff;
   border-radius: 8px;
@@ -169,4 +256,35 @@ input, select {
   cursor: pointer;
 }
 
-.hud-pill button.danger { background: rgba(239, 68, 68, 0.35); }
+.icon-btn.danger { background: rgba(239, 68, 68, 0.4); }
+.icon-btn.muted-pulse { background: rgba(234, 179, 8, 0.35); }
+
+.chat-bar {
+  position: fixed;
+  top: max(54px, calc(env(safe-area-inset-top) + 44px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(92vw, 480px);
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: rgba(15, 20, 32, 0.92);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.chat-bar input {
+  margin: 0;
+  padding: 9px 12px;
+  flex: 1;
+}
+
+.primary-btn.compact {
+  width: auto;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+}
