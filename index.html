@@ -6,55 +6,98 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
-  <title>CloudRoblox M4 — Web Stream</title>
+  <title>CloudRoblox M4 Pro</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Connect Lobby -->
-  <div id="lobby" class="lobby">
-    <div class="card">
-      <div class="badge">MAC MINI M4 • WINDOWS 11</div>
-      <h1>CloudRoblox</h1>
-      <p class="sub">Ultra-low-latency WebRTC stream with native Roblox multi-touch.</p>
+  <!-- 1. Passcode Gate (262767) -->
+  <div id="lockScreen" class="screen">
+    <div id="lockCard" class="card">
+      <div class="badge">PRIVATE CLOUD RIG • M4</div>
+      <h1>CloudRoblox Pro</h1>
+      <p class="sub">Enter your 6-digit access passcode to unlock your Mac mini M4.</p>
 
-      <label>Tunnel URL (Cloudflare / Host)</label>
-      <input id="serverUrl" type="url" placeholder="https://your-tunnel.trycloudflare.com" autocomplete="off" />
+      <label for="passwordInput">Passcode</label>
+      <input id="passwordInput" type="password" inputmode="numeric" maxlength="12" placeholder="••••••" autocomplete="current-password" />
 
-      <div class="row">
-        <div>
-          <label>Access PIN</label>
-          <input id="pinInput" type="password" inputmode="numeric" placeholder="2026" />
-        </div>
-        <div>
-          <label>Quality</label>
-          <select id="qualitySelect">
-            <option value="1920,60">1080p • 60 FPS (iPad Pro)</option>
-            <option value="1600,60" selected>HD+ • 60 FPS (Balanced)</option>
-            <option value="1280,60">720p • 60 FPS (5G / Fast)</option>
-          </select>
-        </div>
-      </div>
-
-      <button id="connectBtn" class="primary-btn">LAUNCH STREAM</button>
-      <p id="statusText" class="status"></p>
-      <p class="tip">iPad Safari Tip: Tap <b>Share → Add to Home Screen</b> for true full-screen gaming without browser bars.</p>
+      <button id="unlockBtn" class="primary-btn">UNLOCK CONSOLE</button>
+      <p id="lockError" class="status"></p>
     </div>
   </div>
 
-  <!-- Active Stream Viewport -->
+  <!-- 2. Connect Lobby -->
+  <div id="lobby" class="screen hidden">
+    <div class="card">
+      <div class="top-row">
+        <div class="badge">MAC MINI M4 • WIN 11</div>
+        <div id="rigStatusPill" class="rig-pill checking">
+          <span class="rig-dot"></span>
+          <span id="rigStatusLabel">CHECKING...</span>
+        </div>
+      </div>
+
+      <h1>Ready to Play</h1>
+      <p class="sub">60 FPS H.264 stream with stereo audio & native Roblox multi-touch.</p>
+
+      <label for="serverUrl">Tunnel URL</label>
+      <input id="serverUrl" type="url" placeholder="https://your-tunnel.trycloudflare.com" autocomplete="off" />
+
+      <label for="qualitySelect">Stream Profile</label>
+      <select id="qualitySelect">
+        <option value="1920,60,14000">Extreme • 1080p 60 FPS (14 Mbps)</option>
+        <option value="1600,60,9000" selected>Pro Balanced • HD+ 60 FPS (9 Mbps)</option>
+        <option value="1280,60,4500">5G Speed • 720p 60 FPS (4.5 Mbps)</option>
+      </select>
+
+      <button id="connectBtn" class="primary-btn">LAUNCH ROBLOX STREAM</button>
+      <p id="statusText" class="status info"></p>
+      <p class="tip">iPad Safari: Tap <b>Share → Add to Home Screen</b> for full edge-to-edge gaming without Safari bars.</p>
+    </div>
+  </div>
+
+  <!-- 3. Computer Offline Screen -->
+  <div id="offlineScreen" class="screen hidden">
+    <div class="card offline-card">
+      <div class="offline-icon">⏻</div>
+      <div class="badge offline-badge">COMPUTER OFFLINE</div>
+      <h1>Mac mini M4 is Offline</h1>
+      <p id="offlineReason" class="sub">
+        Your Windows 11 VM is unreachable. Check that your Mac mini is awake and <b>start.bat</b> is running.
+      </p>
+
+      <button id="retryBtn" class="primary-btn">RETRY CONNECTION</button>
+      <button id="editUrlBtn" class="secondary-btn">CHANGE TUNNEL URL</button>
+    </div>
+  </div>
+
+  <!-- 4. Active Stream Viewport -->
   <div id="streamContainer" class="stream-container hidden">
     <video id="remoteVideo" autoplay playsinline webkit-playsinline muted></video>
     <div id="touchLayer" class="touch-layer"></div>
 
     <!-- CloudMoon-Style Floating HUD Pill -->
     <div id="hudPill" class="hud-pill">
-      <span class="dot"></span>
-      <span id="statPing">-- ms</span>
-      <span class="sep">|</span>
-      <span id="statFps">-- FPS</span>
-      <button id="fullscreenBtn" title="Fullscreen">⛶</button>
-      <button id="disconnectBtn" class="danger" title="Disconnect">✕</button>
+      <button id="hudToggleBtn" class="icon-btn" title="Collapse HUD">◀</button>
+      <div id="hudBody" class="hud-body">
+        <span class="dot"></span>
+        <span id="statPing">-- ms</span>
+        <span class="sep">•</span>
+        <span id="statFps">-- FPS</span>
+        <span class="sep">•</span>
+        <span id="statBitrate">-- Mbps</span>
+        <button id="audioBtn" class="icon-btn muted-pulse" title="Unmute Audio">🔇</button>
+        <button id="chatBtn" class="icon-btn" title="Type in Roblox Chat">⌨</button>
+        <button id="fullscreenBtn" class="icon-btn" title="Fullscreen">⛶</button>
+        <button id="disconnectBtn" class="icon-btn danger" title="Disconnect">✕</button>
+      </div>
+    </div>
+
+    <!-- Roblox Chat Quick-Type Bar -->
+    <div id="chatBar" class="chat-bar hidden">
+      <input id="chatInput" type="text" placeholder="Type Roblox chat message & press Send..." />
+      <button id="sendChatBtn" class="primary-btn compact">SEND</button>
+      <button id="closeChatBtn" class="icon-btn">✕</button>
     </div>
   </div>
 
