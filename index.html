@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
+  <title>CloudRoblox M4 — Web Stream</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Connect Lobby -->
+  <div id="lobby" class="lobby">
+    <div class="card">
+      <div class="badge">MAC MINI M4 • WINDOWS 11</div>
+      <h1>CloudRoblox</h1>
+      <p class="sub">Ultra-low-latency WebRTC stream with native Roblox multi-touch.</p>
+
+      <label>Tunnel URL (Cloudflare / Host)</label>
+      <input id="serverUrl" type="url" placeholder="https://your-tunnel.trycloudflare.com" autocomplete="off" />
+
+      <div class="row">
+        <div>
+          <label>Access PIN</label>
+          <input id="pinInput" type="password" inputmode="numeric" placeholder="2026" />
+        </div>
+        <div>
+          <label>Quality</label>
+          <select id="qualitySelect">
+            <option value="1920,60">1080p • 60 FPS (iPad Pro)</option>
+            <option value="1600,60" selected>HD+ • 60 FPS (Balanced)</option>
+            <option value="1280,60">720p • 60 FPS (5G / Fast)</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="connectBtn" class="primary-btn">LAUNCH STREAM</button>
+      <p id="statusText" class="status"></p>
+      <p class="tip">iPad Safari Tip: Tap <b>Share → Add to Home Screen</b> for true full-screen gaming without browser bars.</p>
+    </div>
+  </div>
+
+  <!-- Active Stream Viewport -->
+  <div id="streamContainer" class="stream-container hidden">
+    <video id="remoteVideo" autoplay playsinline webkit-playsinline muted></video>
+    <div id="touchLayer" class="touch-layer"></div>
+
+    <!-- CloudMoon-Style Floating HUD Pill -->
+    <div id="hudPill" class="hud-pill">
+      <span class="dot"></span>
+      <span id="statPing">-- ms</span>
+      <span class="sep">|</span>
+      <span id="statFps">-- FPS</span>
+      <button id="fullscreenBtn" title="Fullscreen">⛶</button>
+      <button id="disconnectBtn" class="danger" title="Disconnect">✕</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
