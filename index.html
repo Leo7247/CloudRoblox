@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
   <title>CloudRoblox M4 Pro</title>
-  <link rel="manifest" href="manifest.json?v=2" />
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="manifest" href="manifest.json?v=3" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
   <!-- 1. Passcode Gate (262767) -->
@@ -26,22 +26,19 @@
     </form>
   </div>
 
-  <!-- 2. Connect Lobby -->
+  <!-- 2. Connect Lobby (Zero URL Entry Required!) -->
   <div id="lobby" class="screen hidden">
     <div class="card">
       <div class="top-row">
         <div class="badge">MAC MINI M4 • WIN 11</div>
         <div id="rigStatusPill" class="rig-pill checking">
           <span class="rig-dot"></span>
-          <span id="rigStatusLabel">CHECKING...</span>
+          <span id="rigStatusLabel">FINDING RIG...</span>
         </div>
       </div>
 
       <h1>Ready to Play</h1>
-      <p class="sub">60 FPS H.264 stream with stereo audio & native Roblox multi-touch.</p>
-
-      <label for="serverUrl">Tunnel URL</label>
-      <input id="serverUrl" type="url" placeholder="https://your-tunnel.trycloudflare.com" autocomplete="off" />
+      <p class="sub">Auto-connected to your Mac mini M4 • 60 FPS H.264 + stereo audio & native Roblox multi-touch.</p>
 
       <label for="qualitySelect">Stream Profile</label>
       <select id="qualitySelect">
@@ -52,6 +49,12 @@
 
       <button id="connectBtn" type="button" class="primary-btn">LAUNCH ROBLOX STREAM</button>
       <p id="statusText" class="status info"></p>
+
+      <button id="toggleManualBtn" type="button" class="link-btn">Advanced: Manual Override URL</button>
+      <div id="manualBox" class="manual-box hidden">
+        <input id="serverUrl" type="url" placeholder="https://your-tunnel.trycloudflare.com" autocomplete="off" />
+      </div>
+
       <p class="tip">iPad Safari: Tap <b>Share → Add to Home Screen</b> for full edge-to-edge gaming without Safari bars.</p>
     </div>
   </div>
@@ -63,11 +66,10 @@
       <div class="badge offline-badge">COMPUTER OFFLINE</div>
       <h1>Mac mini M4 is Offline</h1>
       <p id="offlineReason" class="sub">
-        Your Windows 11 VM is unreachable. Check that your Mac mini is awake and <b>start.bat</b> is running.
+        Your Windows 11 VM is offline or still booting up. Make sure your Mac mini is awake and <b>start.bat</b> says <b>[ONLINE]</b>.
       </p>
 
       <button id="retryBtn" type="button" class="primary-btn">RETRY CONNECTION</button>
-      <button id="editUrlBtn" type="button" class="secondary-btn">CHANGE TUNNEL URL</button>
     </div>
   </div>
 
@@ -101,6 +103,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
