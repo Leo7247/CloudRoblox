@@ -1,26 +1,149 @@
+const SITE_PASSWORD = "262767";
+const CONNECT_TIMEOUT_MS = 6000;
+
+// Screens
+const lockScreen = document.getElementById("lockScreen");
+const lockCard = document.getElementById("lockCard");
 const lobby = document.getElementById("lobby");
+const offlineScreen = document.getElementById("offlineScreen");
 const streamContainer = document.getElementById("streamContainer");
-const remoteVideo = document.getElementById("remoteVideo");
-const touchLayer = document.getElementById("touchLayer");
+
+// Controls
+const passwordInput = document.getElementById("passwordInput");
+const unlockBtn = document.getElementById("unlockBtn");
+const lockError = document.getElementById("lockError");
 const serverUrlInput = document.getElementById("serverUrl");
-const pinInput = document.getElementById("pinInput");
 const qualitySelect = document.getElementById("qualitySelect");
 const connectBtn = document.getElementById("connectBtn");
 const statusText = document.getElementById("statusText");
+const rigStatusPill = document.getElementById("rigStatusPill");
+const rigStatusLabel = document.getElementById("rigStatusLabel");
+const offlineReason = document.getElementById("offlineReason");
+const retryBtn = document.getElementById("retryBtn");
+const editUrlBtn = document.getElementById("editUrlBtn");
+
+// Stream & HUD
+const remoteVideo = document.getElementById("remoteVideo");
+const touchLayer = document.getElementById("touchLayer");
 const statPing = document.getElementById("statPing");
 const statFps = document.getElementById("statFps");
+const statBitrate = document.getElementById("statBitrate");
+const audioBtn = document.getElementById("audioBtn");
+const hudToggleBtn = document.getElementById("hudToggleBtn");
+const hudBody = document.getElementById("hudBody");
+const chatBtn = document.getElementById("chatBtn");
+const chatBar = document.getElementById("chatBar");
+const chatInput = document.getElementById("chatInput");
+const sendChatBtn = document.getElementById("sendChatBtn");
+const closeChatBtn = document.getElementById("closeChatBtn");
 
-// Restore saved settings
+// Read ?url=... Magic Link if opened from start.bat
+const params = new URLSearchParams(window.location.search);
+const magicUrl = params.get("url");
+if (magicUrl) {
+  localStorage.setItem("cr_url", magicUrl.trim().replace(/\/$/, ""));
+  window.history.replaceState({}, document.title, window.location.pathname);
+}
 serverUrlInput.value = localStorage.getItem("cr_url") || "";
-pinInput.value = localStorage.getItem("cr_pin") || "";
 
 let pc = null;
 let ws = null;
 let inputChannel = null;
 let statsTimer = null;
+let connectTimer = null;
+let wakeLock = null;
+let intentionalClose = false;
+let isStreaming = false;
 
+function showScreen(target) {
+  [lockScreen, lobby, offlineScreen, streamContainer].forEach((el) => {
+    el.classList.add("hidden");
+  });
+  target.classList.remove("hidden");
+}
+
+// --- Live Rig Health Check ---
+async function checkRigHealth() {
+  const rawUrl = serverUrlInput.value.trim().replace(/\/$/, "");
+  if (!rawUrl) {
+    rigStatusPill.className = "rig-pill offline";
+    rigStatusLabel.textContent = "NO URL";
+    return false;
+  }
+
+  rigStatusPill.className = "rig-pill checking";
+  rigStatusLabel.textContent = "CHECKING...";
+
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), 3500);
+
+  try {
+    const res = await fetch(`${rawUrl}/health`, { signal: controller.signal, cache: "no-store" });
+    clearTimeout(id);
+    if (res.ok) {
+      rigStatusPill.className = "rig-pill online";
+      rigStatusLabel.textContent = "M4 ONLINE";
+      return true;
+    }
+  } catch (_) {
+    clearTimeout(id);
+  }
+
+  rigStatusPill.className = "rig-pill offline";
+  rigStatusLabel.textContent = "OFFLINE";
+  return false;
+}
+
+serverUrlInput.addEventListener("change", () => {
+  localStorage.setItem("cr_url", serverUrlInput.value.trim().replace(/\/$/, ""));
+  checkRigHealth();
+});
+
+// --- Passcode Lock Gate ---
+function handleUnlock() {
+  const entered = passwordInput.value.trim();
+  if (entered === SITE_PASSWORD) {
+    lockError.textContent = "";
+    sessionStorage.setItem("cr_unlocked", "1");
+    showScreen(lobby);
+    checkRigHealth();
+  } else {
+    lockError.textContent = "Incorrect passcode.";
+    lockCard.classList.remove("shake");
+    void lockCard.offsetWidth;
+    lockCard.classList.add("shake");
+    passwordInput.value = "";
+  }
+}
+
+unlockBtn.addEventListener("click", handleUnlock);
+passwordInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") handleUnlock();
+});
+
+if (sessionStorage.getItem("cr_unlocked") === "1") {
+  showScreen(lobby);
+  checkRigHealth();
+}
+
+// --- Navigation & Stream Actions ---
 connectBtn.addEventListener("click", startSession);
-document.getElementById("disconnectBtn").addEventListener("click", cleanupSession);
+retryBtn.addEventListener("click", startSession);
+
+editUrlBtn.addEventListener("click", () => {
+  statusText.textContent = "";
+  showScreen(lobby);
+  checkRigHealth();
+});
+
+document.getElementById("disconnectBtn").addEventListener("click", () => {
+  intentionalClose = true;
+  cleanupSession();
+  statusText.textContent = "";
+  showScreen(lobby);
+  checkRigHealth();
+});
+
 document.getElementById("fullscreenBtn").addEventListener("click", () => {
   if (!document.fullscreenElement && streamContainer.requestFullscreen) {
     streamContainer.requestFullscreen().catch(() => {});
@@ -29,44 +152,137 @@ document.getElementById("fullscreenBtn").addEventListener("click", () => {
   }
 });
 
+// Collapsible HUD Pill
+hudToggleBtn.addEventListener("click", () => {
+  const collapsed = hudBody.classList.toggle("hidden");
+  hudToggleBtn.textContent = collapsed ? "▶" : "◀";
+});
+
+// Audio Toggle (Safari requires a tap to unmute)
+audioBtn.addEventListener("click", () => {
+  remoteVideo.muted = !remoteVideo.muted;
+  remoteVideo.volume = 1.0;
+  remoteVideo.play().catch(() => {});
+  updateAudioButton();
+});
+
+function updateAudioButton() {
+  if (remoteVideo.muted) {
+    audioBtn.textContent = "🔇";
+    audioBtn.classList.add("muted-pulse");
+  } else {
+    audioBtn.textContent = "🔊";
+    audioBtn.classList.remove("muted-pulse");
+  }
+}
+
+// Roblox Chat Keyboard Bar
+chatBtn.addEventListener("click", () => {
+  chatBar.classList.toggle("hidden");
+  if (!chatBar.classList.contains("hidden")) {
+    chatInput.focus();
+  }
+});
+
+closeChatBtn.addEventListener("click", () => {
+  chatBar.classList.add("hidden");
+});
+
+function sendChatMessage() {
+  const text = chatInput.value;
+  if (text && inputChannel && inputChannel.readyState === "open") {
+    inputChannel.send(JSON.stringify({ t: "chat", text }));
+  }
+  chatInput.value = "";
+  chatBar.classList.add("hidden");
+}
+
+sendChatBtn.addEventListener("click", sendChatMessage);
+chatInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendChatMessage();
+});
+
 // Prevent iPad Safari pinch-zoom gestures
 document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
 document.addEventListener("gesturechange", (e) => e.preventDefault(), { passive: false });
 
+async function requestWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      wakeLock = await navigator.wakeLock.request("screen");
+    }
+  } catch (_) {}
+}
+
+function showOffline(reasonText) {
+  cleanupSession();
+  if (reasonText) offlineReason.textContent = reasonText;
+  showScreen(offlineScreen);
+}
+
 async function startSession() {
   const rawUrl = serverUrlInput.value.trim().replace(/\/$/, "");
-  const pin = pinInput.value.trim();
-  if (!rawUrl || !pin) {
-    statusText.textContent = "Enter both your Tunnel URL and Access PIN.";
+  if (!rawUrl) {
+    showScreen(lobby);
+    statusText.textContent = "Enter your Cloudflare Tunnel URL first.";
     return;
   }
 
   localStorage.setItem("cr_url", rawUrl);
-  localStorage.setItem("cr_pin", pin);
-  statusText.textContent = "Connecting to Mac mini M4...";
+  intentionalClose = false;
+  isStreaming = false;
+  connectBtn.disabled = true;
+  retryBtn.disabled = true;
+  showScreen(lobby);
+  statusText.textContent = "Pinging Mac mini M4...";
 
+  const online = await checkRigHealth();
+  if (!online) {
+    showOffline("Your Mac mini M4 is offline, asleep, or start.bat is not running.");
+    return;
+  }
+
+  statusText.textContent = "Connecting secure WebRTC tunnel...";
   const wsUrl = rawUrl.replace(/^http/, "ws") + "/ws";
   ws = new WebSocket(wsUrl);
 
+  connectTimer = setTimeout(() => {
+    if (!isStreaming) {
+      intentionalClose = true;
+      showOffline("Stream handshake timed out. Your Mac mini M4 went offline.");
+    }
+  }, CONNECT_TIMEOUT_MS);
+
   ws.onopen = () => {
-    ws.send(JSON.stringify({ type: "auth", pin }));
+    ws.send(JSON.stringify({ type: "auth", pin: SITE_PASSWORD }));
   };
 
   ws.onerror = () => {
-    statusText.textContent = "WebSocket failed. Check your Cloudflare Tunnel URL.";
+    if (!intentionalClose) {
+      showOffline("Your Mac mini M4 is offline or the tunnel closed.");
+    }
+  };
+
+  ws.onclose = () => {
+    if (!intentionalClose && !isStreaming) {
+      showOffline("Connection closed. Your Mac mini M4 is currently offline.");
+    }
   };
 
   ws.onmessage = async (event) => {
     const msg = JSON.parse(event.data);
 
     if (msg.type === "auth_fail") {
-      statusText.textContent = "Invalid PIN.";
+      intentionalClose = true;
       cleanupSession();
+      sessionStorage.removeItem("cr_unlocked");
+      lockError.textContent = "Passcode mismatch. Ensure host_server.py uses 262767.";
+      showScreen(lockScreen);
       return;
     }
 
     if (msg.type === "auth_ok") {
-      statusText.textContent = "Negotiating 60 FPS WebRTC stream...";
+      statusText.textContent = "Starting 60 FPS stream + audio...";
       await initWebRTC();
       return;
     }
@@ -80,8 +296,16 @@ async function startSession() {
   };
 }
 
+// Boost WebRTC H.264 target bitrate in SDP for sharp 1080p/60fps across 5 km
+function applyMaxBitrate(sdp, maxKbps) {
+  return sdp.replace(
+    /(m=video .*\r\n)/g,
+    `$1b=AS:${maxKbps}\r\nb=TIAS:${maxKbps * 1000}\r\n`
+  );
+}
+
 async function initWebRTC() {
-  const [maxWidth, fps] = qualitySelect.value.split(",").map(Number);
+  const [maxWidth, fps, maxKbps] = qualitySelect.value.split(",").map(Number);
 
   pc = new RTCPeerConnection({
     iceServers: [
@@ -90,13 +314,18 @@ async function initWebRTC() {
     ]
   });
 
-  // Unreliable, unordered data channel = zero head-of-line blocking for touch inputs
   inputChannel = pc.createDataChannel("input", { ordered: false, maxRetransmits: 0 });
 
   inputChannel.onopen = () => {
-    lobby.classList.add("hidden");
-    streamContainer.classList.remove("hidden");
-    remoteVideo.play().catch(() => {});
+    clearTimeout(connectTimer);
+    isStreaming = true;
+    connectBtn.disabled = false;
+    retryBtn.disabled = false;
+    showScreen(streamContainer);
+    remoteVideo.muted = false;
+    remoteVideo.volume = 1.0;
+    remoteVideo.play().then(updateAudioButton).catch(updateAudioButton);
+    requestWakeLock();
     startTelemetry();
   };
 
@@ -108,19 +337,29 @@ async function initWebRTC() {
     }
   };
 
+  pc.onconnectionstatechange = () => {
+    if (!pc) return;
+    if ((pc.connectionState === "failed" || pc.connectionState === "disconnected") && !intentionalClose) {
+      showOffline("Lost connection to your Mac mini M4. The computer went offline.");
+    }
+  };
+
   pc.addTransceiver("video", { direction: "recvonly" });
+  pc.addTransceiver("audio", { direction: "recvonly" });
+
+  const mediaStream = new MediaStream();
+  remoteVideo.srcObject = mediaStream;
 
   pc.ontrack = (event) => {
-    if (event.streams && event.streams[0]) {
-      remoteVideo.srcObject = event.streams[0];
-    }
+    mediaStream.addTrack(event.track);
   };
 
   pc.onicecandidate = async (event) => {
     if (!event.candidate && ws && ws.readyState === WebSocket.OPEN) {
+      const boostedSdp = applyMaxBitrate(pc.localDescription.sdp, maxKbps);
       ws.send(JSON.stringify({
         type: "offer",
-        sdp: pc.localDescription.sdp,
+        sdp: boostedSdp,
         sdpType: pc.localDescription.type,
         maxWidth,
         fps
@@ -134,10 +373,11 @@ async function initWebRTC() {
 
 // Compute exact normalized (0..1) coordinates inside the rendered video rectangle
 function getNormalizedPoint(clientX, clientY) {
+  const rect = touchLayer.getBoundingClientRect();
   const vw = remoteVideo.videoWidth || 16;
   const vh = remoteVideo.videoHeight || 9;
-  const cw = touchLayer.clientWidth;
-  const ch = touchLayer.clientHeight;
+  const cw = rect.width;
+  const ch = rect.height;
 
   const videoRatio = vw / vh;
   const containerRatio = cw / ch;
@@ -155,8 +395,8 @@ function getNormalizedPoint(clientX, clientY) {
     offsetY = (ch - renderH) / 2;
   }
 
-  const x = Math.max(0, Math.min(1, (clientX - offsetX) / renderW));
-  const y = Math.max(0, Math.min(1, (clientY - offsetY) / renderH));
+  const x = Math.max(0, Math.min(1, (clientX - rect.left - offsetX) / renderW));
+  const y = Math.max(0, Math.min(1, (clientY - rect.top - offsetY) / renderH));
   return { x, y };
 }
 
@@ -175,8 +415,11 @@ function sendTouchBatch(touchList, state) {
 
 touchLayer.addEventListener("touchstart", (e) => {
   e.preventDefault();
-  remoteVideo.muted = false;
-  remoteVideo.play().catch(() => {});
+  if (remoteVideo.muted) {
+    remoteVideo.muted = false;
+    remoteVideo.volume = 1.0;
+    remoteVideo.play().then(updateAudioButton).catch(() => {});
+  }
   sendTouchBatch(e.changedTouches, "down");
 }, { passive: false });
 
@@ -197,31 +440,54 @@ touchLayer.addEventListener("touchcancel", (e) => {
 
 function startTelemetry() {
   let lastFrames = 0;
+  let lastBytes = 0;
   let lastTime = performance.now();
 
-  statsTimer = setInterval(() => {
+  statsTimer = setInterval(async () => {
+    const now = performance.now();
+    const dt = (now - lastTime) / 1000;
+
     if (inputChannel && inputChannel.readyState === "open") {
-      inputChannel.send(JSON.stringify({ t: "ping", ts: performance.now() }));
+      inputChannel.send(JSON.stringify({ t: "ping", ts: now }));
     }
+
     if (remoteVideo.getVideoPlaybackQuality) {
       const q = remoteVideo.getVideoPlaybackQuality();
-      const now = performance.now();
-      const fps = Math.round(((q.totalVideoFrames - lastFrames) * 1000) / (now - lastTime));
+      const fps = Math.round((q.totalVideoFrames - lastFrames) / dt);
       lastFrames = q.totalVideoFrames;
-      lastTime = now;
       if (fps > 0) statFps.textContent = `${fps} FPS`;
     }
+
+    if (pc) {
+      const stats = await pc.getStats();
+      stats.forEach((report) => {
+        if (report.type === "inbound-rtp" && report.kind === "video") {
+          const mbps = (((report.bytesReceived - lastBytes) * 8) / (dt * 1_000_000)).toFixed(1);
+          lastBytes = report.bytesReceived;
+          if (Number(mbps) >= 0) statBitrate.textContent = `${mbps} Mbps`;
+        }
+      });
+    }
+
+    lastTime = now;
   }, 1000);
 }
 
 function cleanupSession() {
+  clearTimeout(connectTimer);
   clearInterval(statsTimer);
+  if (wakeLock) {
+    wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+  connectBtn.disabled = false;
+  retryBtn.disabled = false;
+  isStreaming = false;
+  chatBar.classList.add("hidden");
   if (inputChannel) inputChannel.close();
   if (pc) pc.close();
   if (ws) ws.close();
   pc = null;
   ws = null;
   inputChannel = null;
-  streamContainer.classList.add("hidden");
-  lobby.classList.remove("hidden");
 }
