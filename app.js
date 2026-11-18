@@ -46,9 +46,13 @@ const statMode = document.getElementById("statMode");
 const statPing = document.getElementById("statPing");
 const statFps = document.getElementById("statFps");
 const statBitrate = document.getElementById("statBitrate");
+const openRobloxBtn = document.getElementById("openRobloxBtn");
+const inputModeBtn = document.getElementById("inputModeBtn");
+const escBtn = document.getElementById("escBtn");
 const audioBtn = document.getElementById("audioBtn");
 const hudToggleBtn = document.getElementById("hudToggleBtn");
 const hudBody = document.getElementById("hudBody");
+const toastBanner = document.getElementById("toastBanner");
 const chatBtn = document.getElementById("chatBtn");
 const chatBar = document.getElementById("chatBar");
 const chatInput = document.getElementById("chatInput");
@@ -63,16 +67,27 @@ let webrtcFallbackTimer = null;
 let wakeLock = null;
 let intentionalClose = false;
 let isStreaming = false;
-let streamMode = "p2p"; // "p2p" or "tunnel"
+let streamMode = "p2p";
+let inputMode = "touch"; // "touch" (Roblox Mobile UI) or "mouse" (Desktop click)
 let tunnelFramesCount = 0;
 let tunnelBytesCount = 0;
 let renderingFrame = false;
+let toastTimer = null;
 
 function showScreen(target) {
   [lockScreen, lobby, offlineScreen, streamContainer].forEach((el) => {
     el.classList.add("hidden");
   });
   target.classList.remove("hidden");
+}
+
+function showToast(text) {
+  clearTimeout(toastTimer);
+  toastBanner.textContent = text;
+  toastBanner.classList.remove("hidden");
+  toastTimer = setTimeout(() => {
+    toastBanner.classList.add("hidden");
+  }, 2600);
 }
 
 toggleManualBtn.addEventListener("click", () => {
@@ -195,6 +210,24 @@ hudToggleBtn.addEventListener("click", () => {
   hudToggleBtn.textContent = collapsed ? "▶" : "◀";
 });
 
+// One-tap Open / Focus Roblox on Windows 11
+openRobloxBtn.addEventListener("click", () => {
+  sendControlMessage({ t: "launch_roblox" });
+  showToast("Opening Roblox on Windows 11...");
+});
+
+// Switch between Native Roblox Multi-Touch (👆) and Desktop Mouse Click (🖱️)
+inputModeBtn.addEventListener("click", () => {
+  inputMode = inputMode === "touch" ? "mouse" : "touch";
+  inputModeBtn.textContent = inputMode === "touch" ? "👆" : "🖱️";
+  showToast(inputMode === "touch" ? "Touch Mode: Roblox Mobile Controls" : "Mouse Mode: Desktop Clicks");
+});
+
+// ESC key for Roblox menu
+escBtn.addEventListener("click", () => {
+  sendControlMessage({ t: "key", key: "esc" });
+});
+
 audioBtn.addEventListener("click", () => {
   remoteVideo.muted = !remoteVideo.muted;
   remoteVideo.volume = 1.0;
@@ -300,7 +333,6 @@ async function startSession() {
   };
 
   ws.onmessage = async (event) => {
-    // Binary frame from Engine 2 (Direct Cloudflare Tunnel Stream)
     if (event.data instanceof ArrayBuffer) {
       handleBinaryFrame(event.data);
       return;
@@ -338,6 +370,10 @@ async function startSession() {
 
     if (msg.type === "fallback_started") {
       activateStreamView("tunnel");
+    }
+
+    if (msg.t === "toast") {
+      showToast(msg.text);
     }
 
     if (msg.t === "pong") {
@@ -436,6 +472,8 @@ async function initWebRTC() {
     if (data.t === "pong") {
       const rtt = Math.round(performance.now() - data.ts);
       statPing.textContent = `${rtt} ms`;
+    } else if (data.t === "toast") {
+      showToast(data.text);
     }
   };
 
@@ -465,7 +503,6 @@ async function initWebRTC() {
     mediaStream.addTrack(event.track);
   };
 
-  // Auto-switch to Direct Tunnel if P2P UDP does not connect within 5.5 seconds
   webrtcFallbackTimer = setTimeout(switchToTunnelFallback, WEBRTC_GRACE_MS);
 
   let offerSent = false;
@@ -524,6 +561,15 @@ function getNormalizedPoint(clientX, clientY) {
 }
 
 function sendTouchBatch(touchList, state) {
+  if (inputMode === "mouse") {
+    if (touchList.length > 0) {
+      const t = touchList[0];
+      const { x, y } = getNormalizedPoint(t.clientX, t.clientY);
+      sendControlMessage({ t: "mouse", x, y, action: state });
+    }
+    return;
+  }
+
   const touches = [];
   for (let i = 0; i < touchList.length; i++) {
     const t = touchList[i];
@@ -560,23 +606,23 @@ touchLayer.addEventListener("touchcancel", (e) => {
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
-// Trackpad / Mouse support
+// Trackpad / External Mouse support on iPad
 let mouseDown = false;
 touchLayer.addEventListener("mousedown", (e) => {
   mouseDown = true;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "down" }] });
+  sendControlMessage({ t: "mouse", x, y, action: "down" });
 });
 touchLayer.addEventListener("mousemove", (e) => {
   if (!mouseDown) return;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "move" }] });
+  sendControlMessage({ t: "mouse", x, y, action: "move" });
 });
 window.addEventListener("mouseup", (e) => {
   if (!mouseDown) return;
   mouseDown = false;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "up" }] });
+  sendControlMessage({ t: "mouse", x, y, action: "up" });
 });
 
 function startTelemetry() {
