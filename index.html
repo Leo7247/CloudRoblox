@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
   <title>CloudRoblox M4 Pro</title>
-  <link rel="manifest" href="manifest.json?v=4" />
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="manifest" href="manifest.json?v=5" />
+  <link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
   <!-- 1. Passcode Gate (262767) -->
@@ -26,7 +26,7 @@
     </form>
   </div>
 
-  <!-- 2. Connect Lobby (Zero URL Entry Required!) -->
+  <!-- 2. Connect Lobby -->
   <div id="lobby" class="screen hidden">
     <div class="card">
       <div class="top-row">
@@ -38,7 +38,7 @@
       </div>
 
       <h1>Ready to Play</h1>
-      <p class="sub">Auto-connected to your Mac mini M4 • 60 FPS H.264 + stereo audio & native Roblox multi-touch.</p>
+      <p class="sub">Auto-connected to your Mac mini M4 • Dual-engine 60 FPS stream & native Roblox multi-touch.</p>
 
       <label for="qualitySelect">Stream Profile</label>
       <select id="qualitySelect">
@@ -73,9 +73,10 @@
     </div>
   </div>
 
-  <!-- 4. Active Stream Viewport -->
+  <!-- 4. Active Stream Viewport (Supports both WebRTC Video & Direct Tunnel Canvas) -->
   <div id="streamContainer" class="stream-container hidden">
     <video id="remoteVideo" autoplay playsinline webkit-playsinline muted></video>
+    <canvas id="streamCanvas" class="hidden"></canvas>
     <div id="touchLayer" class="touch-layer"></div>
 
     <!-- CloudMoon-Style Floating HUD Pill -->
@@ -83,6 +84,7 @@
       <button id="hudToggleBtn" type="button" class="icon-btn" title="Collapse HUD">◀</button>
       <div id="hudBody" class="hud-body">
         <span class="dot"></span>
+        <span id="statMode" class="mode-tag">P2P</span>
         <span id="statPing">-- ms</span>
         <span class="sep">•</span>
         <span id="statFps">-- FPS</span>
@@ -103,6 +105,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
