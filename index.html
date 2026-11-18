@@ -7,23 +7,23 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
   <title>CloudRoblox M4 Pro</title>
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json?v=2" />
+  <link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
   <!-- 1. Passcode Gate (262767) -->
   <div id="lockScreen" class="screen">
-    <div id="lockCard" class="card">
+    <form id="lockCard" class="card" onsubmit="return false;">
       <div class="badge">PRIVATE CLOUD RIG • M4</div>
       <h1>CloudRoblox Pro</h1>
       <p class="sub">Enter your 6-digit access passcode to unlock your Mac mini M4.</p>
 
       <label for="passwordInput">Passcode</label>
-      <input id="passwordInput" type="password" inputmode="numeric" maxlength="12" placeholder="••••••" autocomplete="current-password" />
+      <input id="passwordInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="••••••" autocomplete="off" />
 
-      <button id="unlockBtn" class="primary-btn">UNLOCK CONSOLE</button>
+      <button id="unlockBtn" type="submit" class="primary-btn">UNLOCK CONSOLE</button>
       <p id="lockError" class="status"></p>
-    </div>
+    </form>
   </div>
 
   <!-- 2. Connect Lobby -->
@@ -50,7 +50,7 @@
         <option value="1280,60,4500">5G Speed • 720p 60 FPS (4.5 Mbps)</option>
       </select>
 
-      <button id="connectBtn" class="primary-btn">LAUNCH ROBLOX STREAM</button>
+      <button id="connectBtn" type="button" class="primary-btn">LAUNCH ROBLOX STREAM</button>
       <p id="statusText" class="status info"></p>
       <p class="tip">iPad Safari: Tap <b>Share → Add to Home Screen</b> for full edge-to-edge gaming without Safari bars.</p>
     </div>
@@ -66,8 +66,8 @@
         Your Windows 11 VM is unreachable. Check that your Mac mini is awake and <b>start.bat</b> is running.
       </p>
 
-      <button id="retryBtn" class="primary-btn">RETRY CONNECTION</button>
-      <button id="editUrlBtn" class="secondary-btn">CHANGE TUNNEL URL</button>
+      <button id="retryBtn" type="button" class="primary-btn">RETRY CONNECTION</button>
+      <button id="editUrlBtn" type="button" class="secondary-btn">CHANGE TUNNEL URL</button>
     </div>
   </div>
 
@@ -78,7 +78,7 @@
 
     <!-- CloudMoon-Style Floating HUD Pill -->
     <div id="hudPill" class="hud-pill">
-      <button id="hudToggleBtn" class="icon-btn" title="Collapse HUD">◀</button>
+      <button id="hudToggleBtn" type="button" class="icon-btn" title="Collapse HUD">◀</button>
       <div id="hudBody" class="hud-body">
         <span class="dot"></span>
         <span id="statPing">-- ms</span>
@@ -86,21 +86,21 @@
         <span id="statFps">-- FPS</span>
         <span class="sep">•</span>
         <span id="statBitrate">-- Mbps</span>
-        <button id="audioBtn" class="icon-btn muted-pulse" title="Unmute Audio">🔇</button>
-        <button id="chatBtn" class="icon-btn" title="Type in Roblox Chat">⌨</button>
-        <button id="fullscreenBtn" class="icon-btn" title="Fullscreen">⛶</button>
-        <button id="disconnectBtn" class="icon-btn danger" title="Disconnect">✕</button>
+        <button id="audioBtn" type="button" class="icon-btn muted-pulse" title="Unmute Audio">🔇</button>
+        <button id="chatBtn" type="button" class="icon-btn" title="Type in Roblox Chat">⌨</button>
+        <button id="fullscreenBtn" type="button" class="icon-btn" title="Fullscreen">⛶</button>
+        <button id="disconnectBtn" type="button" class="icon-btn danger" title="Disconnect">✕</button>
       </div>
     </div>
 
     <!-- Roblox Chat Quick-Type Bar -->
     <div id="chatBar" class="chat-bar hidden">
       <input id="chatInput" type="text" placeholder="Type Roblox chat message & press Send..." />
-      <button id="sendChatBtn" class="primary-btn compact">SEND</button>
-      <button id="closeChatBtn" class="icon-btn">✕</button>
+      <button id="sendChatBtn" type="button" class="primary-btn compact">SEND</button>
+      <button id="closeChatBtn" type="button" class="icon-btn">✕</button>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>
