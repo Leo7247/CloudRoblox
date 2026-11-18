@@ -1,6 +1,19 @@
 const SITE_PASSWORD = "262767";
 const BEACON_SUBSCRIBE_URL = "https://ntfy.sh/cloudroblox-leo7247-262767-rig/json?poll=1&since=latest";
-const CONNECT_TIMEOUT_MS = 25000;
+const WEBRTC_GRACE_MS = 5500;
+
+const ICE_SERVERS = [
+  { urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turns:openrelay.metered.ca:443?transport=tcp"
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject"
+  }
+];
 
 // Screens
 const lockScreen = document.getElementById("lockScreen");
@@ -26,7 +39,10 @@ const retryBtn = document.getElementById("retryBtn");
 
 // Stream & HUD
 const remoteVideo = document.getElementById("remoteVideo");
+const streamCanvas = document.getElementById("streamCanvas");
+const canvasCtx = streamCanvas.getContext("2d");
 const touchLayer = document.getElementById("touchLayer");
+const statMode = document.getElementById("statMode");
 const statPing = document.getElementById("statPing");
 const statFps = document.getElementById("statFps");
 const statBitrate = document.getElementById("statBitrate");
@@ -39,15 +55,18 @@ const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 const closeChatBtn = document.getElementById("closeChatBtn");
 
-let discoveredUrl = "";
 let pc = null;
 let ws = null;
 let inputChannel = null;
 let statsTimer = null;
-let connectTimer = null;
+let webrtcFallbackTimer = null;
 let wakeLock = null;
 let intentionalClose = false;
 let isStreaming = false;
+let streamMode = "p2p"; // "p2p" or "tunnel"
+let tunnelFramesCount = 0;
+let tunnelBytesCount = 0;
+let renderingFrame = false;
 
 function showScreen(target) {
   [lockScreen, lobby, offlineScreen, streamContainer].forEach((el) => {
@@ -94,7 +113,6 @@ async function checkRigHealth() {
 
   const targetUrl = await resolveRigUrl();
   if (!targetUrl) {
-    discoveredUrl = "";
     rigStatusPill.className = "rig-pill offline";
     rigStatusLabel.textContent = "OFFLINE";
     return "";
@@ -110,7 +128,6 @@ async function checkRigHealth() {
     });
     clearTimeout(timer);
     if (res.ok) {
-      discoveredUrl = targetUrl;
       rigStatusPill.className = "rig-pill online";
       rigStatusLabel.textContent = "M4 ONLINE";
       return targetUrl;
@@ -119,7 +136,6 @@ async function checkRigHealth() {
     clearTimeout(timer);
   }
 
-  discoveredUrl = "";
   rigStatusPill.className = "rig-pill offline";
   rigStatusLabel.textContent = "OFFLINE";
   return "";
@@ -207,10 +223,19 @@ closeChatBtn.addEventListener("click", () => {
   chatBar.classList.add("hidden");
 });
 
+function sendControlMessage(obj) {
+  const raw = JSON.stringify(obj);
+  if (streamMode === "p2p" && inputChannel && inputChannel.readyState === "open") {
+    inputChannel.send(raw);
+  } else if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(raw);
+  }
+}
+
 function sendChatMessage() {
   const text = chatInput.value;
-  if (text && inputChannel && inputChannel.readyState === "open") {
-    inputChannel.send(JSON.stringify({ t: "chat", text }));
+  if (text) {
+    sendControlMessage({ t: "chat", text });
   }
   chatInput.value = "";
   chatBar.classList.add("hidden");
@@ -241,10 +266,11 @@ function showOffline(reasonText) {
 async function startSession() {
   intentionalClose = false;
   isStreaming = false;
+  streamMode = "p2p";
   connectBtn.disabled = true;
   retryBtn.disabled = true;
   showScreen(lobby);
-  statusText.textContent = "1/4 Pinging Mac mini M4...";
+  statusText.textContent = "1/3 Pinging Mac mini M4...";
 
   const liveUrl = await checkRigHealth();
   if (!liveUrl) {
@@ -252,16 +278,10 @@ async function startSession() {
     return;
   }
 
-  statusText.textContent = "2/4 Authenticating session...";
+  statusText.textContent = "2/3 Authenticating session...";
   const wsUrl = liveUrl.replace(/^http/, "ws") + "/ws";
   ws = new WebSocket(wsUrl);
-
-  connectTimer = setTimeout(() => {
-    if (!isStreaming) {
-      intentionalClose = true;
-      showOffline("WebRTC media handshake timed out. Tip: Set Parallels Network to 'Bridged' if on cellular/external Wi-Fi.");
-    }
-  }, CONNECT_TIMEOUT_MS);
+  ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
     ws.send(JSON.stringify({ type: "auth", pin: SITE_PASSWORD }));
@@ -274,12 +294,18 @@ async function startSession() {
   };
 
   ws.onclose = () => {
-    if (!intentionalClose && !isStreaming) {
-      showOffline("Connection closed. Your Mac mini M4 is currently offline.");
+    if (!intentionalClose) {
+      showOffline("Connection closed. Your Mac mini M4 went offline.");
     }
   };
 
   ws.onmessage = async (event) => {
+    // Binary frame from Engine 2 (Direct Cloudflare Tunnel Stream)
+    if (event.data instanceof ArrayBuffer) {
+      handleBinaryFrame(event.data);
+      return;
+    }
+
     const msg = JSON.parse(event.data);
 
     if (msg.type === "auth_fail") {
@@ -298,19 +324,94 @@ async function startSession() {
     }
 
     if (msg.type === "auth_ok") {
-      statusText.textContent = "3/4 Preparing network route...";
+      statusText.textContent = "3/3 Connecting 60 FPS stream...";
       await initWebRTC();
       return;
     }
 
     if (msg.type === "answer" && pc) {
-      statusText.textContent = "4/4 Linking 60 FPS video & audio...";
       await pc.setRemoteDescription(new RTCSessionDescription({
         sdp: msg.sdp,
         type: msg.sdpType
       }));
     }
+
+    if (msg.type === "fallback_started") {
+      activateStreamView("tunnel");
+    }
+
+    if (msg.t === "pong") {
+      const rtt = Math.round(performance.now() - msg.ts);
+      statPing.textContent = `${rtt} ms`;
+    }
   };
+}
+
+function activateStreamView(mode) {
+  clearTimeout(webrtcFallbackTimer);
+  streamMode = mode;
+  isStreaming = true;
+  connectBtn.disabled = false;
+  retryBtn.disabled = false;
+  statMode.textContent = mode === "p2p" ? "P2P" : "TUNNEL";
+
+  if (mode === "p2p") {
+    remoteVideo.classList.remove("hidden");
+    streamCanvas.classList.add("hidden");
+    remoteVideo.muted = false;
+    remoteVideo.volume = 1.0;
+    remoteVideo.play().then(updateAudioButton).catch(updateAudioButton);
+  } else {
+    remoteVideo.classList.add("hidden");
+    streamCanvas.classList.remove("hidden");
+    audioBtn.classList.add("hidden");
+  }
+
+  showScreen(streamContainer);
+  requestWakeLock();
+  startTelemetry();
+}
+
+function switchToTunnelFallback() {
+  if (isStreaming || intentionalClose) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+  statusText.textContent = "NAT blocked P2P UDP — switching to Direct Cloudflare Tunnel...";
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+  const [maxWidth, fps] = qualitySelect.value.split(",").map(Number);
+  ws.send(JSON.stringify({
+    type: "fallback_stream",
+    maxWidth,
+    fps
+  }));
+}
+
+async function handleBinaryFrame(buffer) {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length < 2 || bytes[0] !== 1) return;
+
+  tunnelFramesCount++;
+  tunnelBytesCount += bytes.byteLength;
+
+  if (renderingFrame) return;
+  renderingFrame = true;
+
+  try {
+    const jpegBlob = new Blob([bytes.subarray(1)], { type: "image/jpeg" });
+    const bitmap = await createImageBitmap(jpegBlob);
+    if (streamCanvas.width !== bitmap.width || streamCanvas.height !== bitmap.height) {
+      streamCanvas.width = bitmap.width;
+      streamCanvas.height = bitmap.height;
+    }
+    canvasCtx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+  } catch (_) {
+  } finally {
+    renderingFrame = false;
+  }
 }
 
 function applyMaxBitrate(sdp, maxKbps) {
@@ -323,26 +424,11 @@ function applyMaxBitrate(sdp, maxKbps) {
 async function initWebRTC() {
   const [maxWidth, fps, maxKbps] = qualitySelect.value.split(",").map(Number);
 
-  pc = new RTCPeerConnection({
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun.cloudflare.com:3478" }
-    ]
-  });
-
+  pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   inputChannel = pc.createDataChannel("input", { ordered: false, maxRetransmits: 0 });
 
   inputChannel.onopen = () => {
-    clearTimeout(connectTimer);
-    isStreaming = true;
-    connectBtn.disabled = false;
-    retryBtn.disabled = false;
-    showScreen(streamContainer);
-    remoteVideo.muted = false;
-    remoteVideo.volume = 1.0;
-    remoteVideo.play().then(updateAudioButton).catch(updateAudioButton);
-    requestWakeLock();
-    startTelemetry();
+    activateStreamView("p2p");
   };
 
   inputChannel.onmessage = (e) => {
@@ -355,15 +441,16 @@ async function initWebRTC() {
 
   pc.oniceconnectionstatechange = () => {
     if (!pc) return;
-    if (pc.iceConnectionState === "failed" && !intentionalClose) {
-      intentionalClose = true;
-      showOffline("Peer-to-peer UDP blocked by NAT. In Parallels Desktop, switch Configure > Hardware > Network to 'Bridged' mode.");
+    if (pc.iceConnectionState === "failed" && !isStreaming) {
+      switchToTunnelFallback();
     }
   };
 
   pc.onconnectionstatechange = () => {
     if (!pc) return;
-    if ((pc.connectionState === "failed" || pc.connectionState === "disconnected") && !intentionalClose) {
+    if (pc.connectionState === "failed" && !isStreaming) {
+      switchToTunnelFallback();
+    } else if ((pc.connectionState === "failed" || pc.connectionState === "disconnected") && isStreaming && !intentionalClose) {
       showOffline("Lost connection to your Mac mini M4. The computer went offline.");
     }
   };
@@ -378,11 +465,13 @@ async function initWebRTC() {
     mediaStream.addTrack(event.track);
   };
 
+  // Auto-switch to Direct Tunnel if P2P UDP does not connect within 5.5 seconds
+  webrtcFallbackTimer = setTimeout(switchToTunnelFallback, WEBRTC_GRACE_MS);
+
   let offerSent = false;
   const sendOfferNow = () => {
     if (offerSent || !pc || !ws || ws.readyState !== WebSocket.OPEN) return;
     offerSent = true;
-    statusText.textContent = "3/4 Starting M4 capture engine...";
     const boostedSdp = applyMaxBitrate(pc.localDescription.sdp, maxKbps);
     ws.send(JSON.stringify({
       type: "offer",
@@ -393,12 +482,10 @@ async function initWebRTC() {
     }));
   };
 
-  // Send offer immediately once ICE completes OR after 900ms (prevents Safari STUN stall)
-  const iceGraceTimer = setTimeout(sendOfferNow, 900);
-
+  const iceGatherTimer = setTimeout(sendOfferNow, 3000);
   pc.onicecandidate = (event) => {
     if (!event.candidate) {
-      clearTimeout(iceGraceTimer);
+      clearTimeout(iceGatherTimer);
       sendOfferNow();
     }
   };
@@ -407,10 +494,11 @@ async function initWebRTC() {
   await pc.setLocalDescription(offer);
 }
 
+// Compute exact normalized (0..1) coordinates inside whichever surface is active
 function getNormalizedPoint(clientX, clientY) {
   const rect = touchLayer.getBoundingClientRect();
-  const vw = remoteVideo.videoWidth || 16;
-  const vh = remoteVideo.videoHeight || 9;
+  const vw = (streamMode === "p2p" ? remoteVideo.videoWidth : streamCanvas.width) || 16;
+  const vh = (streamMode === "p2p" ? remoteVideo.videoHeight : streamCanvas.height) || 9;
   const cw = rect.width;
   const ch = rect.height;
 
@@ -436,7 +524,6 @@ function getNormalizedPoint(clientX, clientY) {
 }
 
 function sendTouchBatch(touchList, state) {
-  if (!inputChannel || inputChannel.readyState !== "open") return;
   const touches = [];
   for (let i = 0; i < touchList.length; i++) {
     const t = touchList[i];
@@ -444,13 +531,13 @@ function sendTouchBatch(touchList, state) {
     touches.push({ id: t.identifier, x, y, state });
   }
   if (touches.length > 0) {
-    inputChannel.send(JSON.stringify({ t: "touch", touches }));
+    sendControlMessage({ t: "touch", touches });
   }
 }
 
 touchLayer.addEventListener("touchstart", (e) => {
   e.preventDefault();
-  if (remoteVideo.muted) {
+  if (streamMode === "p2p" && remoteVideo.muted) {
     remoteVideo.muted = false;
     remoteVideo.volume = 1.0;
     remoteVideo.play().then(updateAudioButton).catch(() => {});
@@ -473,7 +560,27 @@ touchLayer.addEventListener("touchcancel", (e) => {
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
+// Trackpad / Mouse support
+let mouseDown = false;
+touchLayer.addEventListener("mousedown", (e) => {
+  mouseDown = true;
+  const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "down" }] });
+});
+touchLayer.addEventListener("mousemove", (e) => {
+  if (!mouseDown) return;
+  const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "move" }] });
+});
+window.addEventListener("mouseup", (e) => {
+  if (!mouseDown) return;
+  mouseDown = false;
+  const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "up" }] });
+});
+
 function startTelemetry() {
+  clearInterval(statsTimer);
   let lastFrames = 0;
   let lastBytes = 0;
   let lastTime = performance.now();
@@ -482,26 +589,32 @@ function startTelemetry() {
     const now = performance.now();
     const dt = (now - lastTime) / 1000;
 
-    if (inputChannel && inputChannel.readyState === "open") {
-      inputChannel.send(JSON.stringify({ t: "ping", ts: now }));
-    }
+    sendControlMessage({ t: "ping", ts: now });
 
-    if (remoteVideo.getVideoPlaybackQuality) {
-      const q = remoteVideo.getVideoPlaybackQuality();
-      const fps = Math.round((q.totalVideoFrames - lastFrames) / dt);
-      lastFrames = q.totalVideoFrames;
-      if (fps > 0) statFps.textContent = `${fps} FPS`;
-    }
-
-    if (pc) {
-      const stats = await pc.getStats();
-      stats.forEach((report) => {
-        if (report.type === "inbound-rtp" && report.kind === "video") {
-          const mbps = (((report.bytesReceived - lastBytes) * 8) / (dt * 1_000_000)).toFixed(1);
-          lastBytes = report.bytesReceived;
-          if (Number(mbps) >= 0) statBitrate.textContent = `${mbps} Mbps`;
-        }
-      });
+    if (streamMode === "p2p") {
+      if (remoteVideo.getVideoPlaybackQuality) {
+        const q = remoteVideo.getVideoPlaybackQuality();
+        const fps = Math.round((q.totalVideoFrames - lastFrames) / dt);
+        lastFrames = q.totalVideoFrames;
+        if (fps > 0) statFps.textContent = `${fps} FPS`;
+      }
+      if (pc) {
+        const stats = await pc.getStats();
+        stats.forEach((report) => {
+          if (report.type === "inbound-rtp" && report.kind === "video") {
+            const mbps = (((report.bytesReceived - lastBytes) * 8) / (dt * 1_000_000)).toFixed(1);
+            lastBytes = report.bytesReceived;
+            if (Number(mbps) >= 0) statBitrate.textContent = `${mbps} Mbps`;
+          }
+        });
+      }
+    } else {
+      const fps = Math.round(tunnelFramesCount / dt);
+      const mbps = ((tunnelBytesCount * 8) / (dt * 1_000_000)).toFixed(1);
+      tunnelFramesCount = 0;
+      tunnelBytesCount = 0;
+      statFps.textContent = `${fps} FPS`;
+      statBitrate.textContent = `${mbps} Mbps`;
     }
 
     lastTime = now;
@@ -509,7 +622,7 @@ function startTelemetry() {
 }
 
 function cleanupSession() {
-  clearTimeout(connectTimer);
+  clearTimeout(webrtcFallbackTimer);
   clearInterval(statsTimer);
   if (wakeLock) {
     wakeLock.release().catch(() => {});
@@ -518,6 +631,7 @@ function cleanupSession() {
   connectBtn.disabled = false;
   retryBtn.disabled = false;
   isStreaming = false;
+  audioBtn.classList.remove("hidden");
   chatBar.classList.add("hidden");
   if (inputChannel) inputChannel.close();
   if (pc) pc.close();
