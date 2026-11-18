@@ -1,5 +1,6 @@
 const SITE_PASSWORD = "262767";
-const CONNECT_TIMEOUT_MS = 6000;
+const BEACON_SUBSCRIBE_URL = "https://ntfy.sh/cloudroblox-leo7247-262767-rig/json?poll=1&since=latest";
+const CONNECT_TIMEOUT_MS = 8000;
 
 // Screens
 const lockScreen = document.getElementById("lockScreen");
@@ -13,6 +14,8 @@ const passwordInput = document.getElementById("passwordInput");
 const unlockBtn = document.getElementById("unlockBtn");
 const lockError = document.getElementById("lockError");
 const serverUrlInput = document.getElementById("serverUrl");
+const toggleManualBtn = document.getElementById("toggleManualBtn");
+const manualBox = document.getElementById("manualBox");
 const qualitySelect = document.getElementById("qualitySelect");
 const connectBtn = document.getElementById("connectBtn");
 const statusText = document.getElementById("statusText");
@@ -20,7 +23,6 @@ const rigStatusPill = document.getElementById("rigStatusPill");
 const rigStatusLabel = document.getElementById("rigStatusLabel");
 const offlineReason = document.getElementById("offlineReason");
 const retryBtn = document.getElementById("retryBtn");
-const editUrlBtn = document.getElementById("editUrlBtn");
 
 // Stream & HUD
 const remoteVideo = document.getElementById("remoteVideo");
@@ -37,15 +39,7 @@ const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 const closeChatBtn = document.getElementById("closeChatBtn");
 
-// Read ?url=... Magic Link if opened from start.bat
-const params = new URLSearchParams(window.location.search);
-const magicUrl = params.get("url");
-if (magicUrl) {
-  localStorage.setItem("cr_url", magicUrl.trim().replace(/\/$/, ""));
-  window.history.replaceState({}, document.title, window.location.pathname);
-}
-serverUrlInput.value = localStorage.getItem("cr_url") || "";
-
+let discoveredUrl = "";
 let pc = null;
 let ws = null;
 let inputChannel = null;
@@ -62,42 +56,74 @@ function showScreen(target) {
   target.classList.remove("hidden");
 }
 
-// --- Live Rig Health Check ---
-async function checkRigHealth() {
-  const rawUrl = serverUrlInput.value.trim().replace(/\/$/, "");
-  if (!rawUrl) {
-    rigStatusPill.className = "rig-pill offline";
-    rigStatusLabel.textContent = "NO URL";
-    return false;
-  }
+toggleManualBtn.addEventListener("click", () => {
+  manualBox.classList.toggle("hidden");
+});
 
-  rigStatusPill.className = "rig-pill checking";
-  rigStatusLabel.textContent = "CHECKING...";
+// --- Automatic Tunnel Discovery + Live Health Check ---
+async function resolveRigUrl() {
+  const manualOverride = serverUrlInput.value.trim().replace(/\/$/, "");
+  if (manualOverride) return manualOverride;
 
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), 3500);
+  const params = new URLSearchParams(window.location.search);
+  const queryUrl = params.get("url");
+  if (queryUrl) return queryUrl.trim().replace(/\/$/, "");
 
   try {
-    const res = await fetch(`${rawUrl}/health`, { signal: controller.signal, cache: "no-store" });
-    clearTimeout(id);
-    if (res.ok) {
-      rigStatusPill.className = "rig-pill online";
-      rigStatusLabel.textContent = "M4 ONLINE";
-      return true;
+    const res = await fetch(`${BEACON_SUBSCRIBE_URL}&_=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return "";
+    const rawText = await res.text();
+    const lines = rawText.trim().split("\n").filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const evt = JSON.parse(lines[i]);
+      if (evt.event === "message" && evt.message) {
+        const data = JSON.parse(evt.message);
+        if (data.url && data.url.startsWith("https://")) {
+          return data.url.trim().replace(/\/$/, "");
+        }
+        return "";
+      }
     }
-  } catch (_) {
-    clearTimeout(id);
-  }
-
-  rigStatusPill.className = "rig-pill offline";
-  rigStatusLabel.textContent = "OFFLINE";
-  return false;
+  } catch (_) {}
+  return "";
 }
 
-serverUrlInput.addEventListener("change", () => {
-  localStorage.setItem("cr_url", serverUrlInput.value.trim().replace(/\/$/, ""));
-  checkRigHealth();
-});
+async function checkRigHealth() {
+  rigStatusPill.className = "rig-pill checking";
+  rigStatusLabel.textContent = "FINDING RIG...";
+
+  const targetUrl = await resolveRigUrl();
+  if (!targetUrl) {
+    discoveredUrl = "";
+    rigStatusPill.className = "rig-pill offline";
+    rigStatusLabel.textContent = "OFFLINE";
+    return "";
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 7000);
+
+  try {
+    const res = await fetch(`${targetUrl}/health`, {
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    clearTimeout(timer);
+    if (res.ok) {
+      discoveredUrl = targetUrl;
+      rigStatusPill.className = "rig-pill online";
+      rigStatusLabel.textContent = "M4 ONLINE";
+      return targetUrl;
+    }
+  } catch (_) {
+    clearTimeout(timer);
+  }
+
+  discoveredUrl = "";
+  rigStatusPill.className = "rig-pill offline";
+  rigStatusLabel.textContent = "OFFLINE";
+  return "";
+}
 
 // --- Passcode Lock Gate ---
 function handleUnlock(e) {
@@ -132,12 +158,6 @@ if (sessionStorage.getItem("cr_unlocked") === "1") {
 connectBtn.addEventListener("click", startSession);
 retryBtn.addEventListener("click", startSession);
 
-editUrlBtn.addEventListener("click", () => {
-  statusText.textContent = "";
-  showScreen(lobby);
-  checkRigHealth();
-});
-
 document.getElementById("disconnectBtn").addEventListener("click", () => {
   intentionalClose = true;
   cleanupSession();
@@ -160,7 +180,7 @@ hudToggleBtn.addEventListener("click", () => {
   hudToggleBtn.textContent = collapsed ? "▶" : "◀";
 });
 
-// Audio Toggle (Safari requires a tap to unmute)
+// Audio Toggle
 audioBtn.addEventListener("click", () => {
   remoteVideo.muted = !remoteVideo.muted;
   remoteVideo.volume = 1.0;
@@ -223,29 +243,21 @@ function showOffline(reasonText) {
 }
 
 async function startSession() {
-  const rawUrl = serverUrlInput.value.trim().replace(/\/$/, "");
-  if (!rawUrl) {
-    showScreen(lobby);
-    statusText.textContent = "Enter your Cloudflare Tunnel URL first.";
-    return;
-  }
-
-  localStorage.setItem("cr_url", rawUrl);
   intentionalClose = false;
   isStreaming = false;
   connectBtn.disabled = true;
   retryBtn.disabled = true;
   showScreen(lobby);
-  statusText.textContent = "Pinging Mac mini M4...";
+  statusText.textContent = "Locating Mac mini M4...";
 
-  const online = await checkRigHealth();
-  if (!online) {
-    showOffline("Your Mac mini M4 is offline, asleep, or start.bat is not running.");
+  const liveUrl = await checkRigHealth();
+  if (!liveUrl) {
+    showOffline("Your Mac mini M4 is offline, asleep, or start.bat hasn't finished booting yet.");
     return;
   }
 
   statusText.textContent = "Connecting secure WebRTC tunnel...";
-  const wsUrl = rawUrl.replace(/^http/, "ws") + "/ws";
+  const wsUrl = liveUrl.replace(/^http/, "ws") + "/ws";
   ws = new WebSocket(wsUrl);
 
   connectTimer = setTimeout(() => {
@@ -261,7 +273,7 @@ async function startSession() {
 
   ws.onerror = () => {
     if (!intentionalClose) {
-      showOffline("Your Mac mini M4 is offline or the tunnel closed.");
+      showOffline("Could not open stream socket. Check that start.bat is running.");
     }
   };
 
@@ -278,7 +290,7 @@ async function startSession() {
       intentionalClose = true;
       cleanupSession();
       sessionStorage.removeItem("cr_unlocked");
-      lockError.textContent = "Passcode mismatch. Ensure host_server.py uses 262767.";
+      lockError.textContent = "Passcode mismatch with host_server.py.";
       showScreen(lockScreen);
       return;
     }
@@ -298,7 +310,6 @@ async function startSession() {
   };
 }
 
-// Boost WebRTC H.264 target bitrate in SDP for sharp 1080p/60fps across 5 km
 function applyMaxBitrate(sdp, maxKbps) {
   return sdp.replace(
     /(m=video .*\r\n)/g,
@@ -373,7 +384,6 @@ async function initWebRTC() {
   await pc.setLocalDescription(offer);
 }
 
-// Compute exact normalized (0..1) coordinates inside the rendered video rectangle
 function getNormalizedPoint(clientX, clientY) {
   const rect = touchLayer.getBoundingClientRect();
   const vw = remoteVideo.videoWidth || 16;
