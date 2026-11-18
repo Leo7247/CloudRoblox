@@ -100,7 +100,8 @@ serverUrlInput.addEventListener("change", () => {
 });
 
 // --- Passcode Lock Gate ---
-function handleUnlock() {
+function handleUnlock(e) {
+  if (e) e.preventDefault();
   const entered = passwordInput.value.trim();
   if (entered === SITE_PASSWORD) {
     lockError.textContent = "";
@@ -116,9 +117,10 @@ function handleUnlock() {
   }
 }
 
+lockCard.addEventListener("submit", handleUnlock);
 unlockBtn.addEventListener("click", handleUnlock);
 passwordInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") handleUnlock();
+  if (e.key === "Enter") handleUnlock(e);
 });
 
 if (sessionStorage.getItem("cr_unlocked") === "1") {
@@ -202,7 +204,7 @@ chatInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendChatMessage();
 });
 
-// Prevent iPad Safari pinch-zoom gestures
+// Prevent iPad Safari pinch-zoom gestures during gameplay
 document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
 document.addEventListener("gesturechange", (e) => e.preventDefault(), { passive: false });
 
