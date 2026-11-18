@@ -1,6 +1,6 @@
 const SITE_PASSWORD = "262767";
 const BEACON_SUBSCRIBE_URL = "https://ntfy.sh/cloudroblox-leo7247-262767-rig/json?poll=1&since=latest";
-const CONNECT_TIMEOUT_MS = 8000;
+const CONNECT_TIMEOUT_MS = 25000;
 
 // Screens
 const lockScreen = document.getElementById("lockScreen");
@@ -174,13 +174,11 @@ document.getElementById("fullscreenBtn").addEventListener("click", () => {
   }
 });
 
-// Collapsible HUD Pill
 hudToggleBtn.addEventListener("click", () => {
   const collapsed = hudBody.classList.toggle("hidden");
   hudToggleBtn.textContent = collapsed ? "▶" : "◀";
 });
 
-// Audio Toggle
 audioBtn.addEventListener("click", () => {
   remoteVideo.muted = !remoteVideo.muted;
   remoteVideo.volume = 1.0;
@@ -198,7 +196,6 @@ function updateAudioButton() {
   }
 }
 
-// Roblox Chat Keyboard Bar
 chatBtn.addEventListener("click", () => {
   chatBar.classList.toggle("hidden");
   if (!chatBar.classList.contains("hidden")) {
@@ -224,7 +221,6 @@ chatInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") sendChatMessage();
 });
 
-// Prevent iPad Safari pinch-zoom gestures during gameplay
 document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
 document.addEventListener("gesturechange", (e) => e.preventDefault(), { passive: false });
 
@@ -248,7 +244,7 @@ async function startSession() {
   connectBtn.disabled = true;
   retryBtn.disabled = true;
   showScreen(lobby);
-  statusText.textContent = "Locating Mac mini M4...";
+  statusText.textContent = "1/4 Pinging Mac mini M4...";
 
   const liveUrl = await checkRigHealth();
   if (!liveUrl) {
@@ -256,14 +252,14 @@ async function startSession() {
     return;
   }
 
-  statusText.textContent = "Connecting secure WebRTC tunnel...";
+  statusText.textContent = "2/4 Authenticating session...";
   const wsUrl = liveUrl.replace(/^http/, "ws") + "/ws";
   ws = new WebSocket(wsUrl);
 
   connectTimer = setTimeout(() => {
     if (!isStreaming) {
       intentionalClose = true;
-      showOffline("Stream handshake timed out. Your Mac mini M4 went offline.");
+      showOffline("WebRTC media handshake timed out. Tip: Set Parallels Network to 'Bridged' if on cellular/external Wi-Fi.");
     }
   }, CONNECT_TIMEOUT_MS);
 
@@ -295,13 +291,20 @@ async function startSession() {
       return;
     }
 
+    if (msg.type === "error") {
+      intentionalClose = true;
+      showOffline(msg.message || "Windows 11 host reported a stream error.");
+      return;
+    }
+
     if (msg.type === "auth_ok") {
-      statusText.textContent = "Starting 60 FPS stream + audio...";
+      statusText.textContent = "3/4 Preparing network route...";
       await initWebRTC();
       return;
     }
 
     if (msg.type === "answer" && pc) {
+      statusText.textContent = "4/4 Linking 60 FPS video & audio...";
       await pc.setRemoteDescription(new RTCSessionDescription({
         sdp: msg.sdp,
         type: msg.sdpType
@@ -350,6 +353,14 @@ async function initWebRTC() {
     }
   };
 
+  pc.oniceconnectionstatechange = () => {
+    if (!pc) return;
+    if (pc.iceConnectionState === "failed" && !intentionalClose) {
+      intentionalClose = true;
+      showOffline("Peer-to-peer UDP blocked by NAT. In Parallels Desktop, switch Configure > Hardware > Network to 'Bridged' mode.");
+    }
+  };
+
   pc.onconnectionstatechange = () => {
     if (!pc) return;
     if ((pc.connectionState === "failed" || pc.connectionState === "disconnected") && !intentionalClose) {
@@ -367,16 +378,28 @@ async function initWebRTC() {
     mediaStream.addTrack(event.track);
   };
 
-  pc.onicecandidate = async (event) => {
-    if (!event.candidate && ws && ws.readyState === WebSocket.OPEN) {
-      const boostedSdp = applyMaxBitrate(pc.localDescription.sdp, maxKbps);
-      ws.send(JSON.stringify({
-        type: "offer",
-        sdp: boostedSdp,
-        sdpType: pc.localDescription.type,
-        maxWidth,
-        fps
-      }));
+  let offerSent = false;
+  const sendOfferNow = () => {
+    if (offerSent || !pc || !ws || ws.readyState !== WebSocket.OPEN) return;
+    offerSent = true;
+    statusText.textContent = "3/4 Starting M4 capture engine...";
+    const boostedSdp = applyMaxBitrate(pc.localDescription.sdp, maxKbps);
+    ws.send(JSON.stringify({
+      type: "offer",
+      sdp: boostedSdp,
+      sdpType: pc.localDescription.type,
+      maxWidth,
+      fps
+    }));
+  };
+
+  // Send offer immediately once ICE completes OR after 900ms (prevents Safari STUN stall)
+  const iceGraceTimer = setTimeout(sendOfferNow, 900);
+
+  pc.onicecandidate = (event) => {
+    if (!event.candidate) {
+      clearTimeout(iceGraceTimer);
+      sendOfferNow();
     }
   };
 
