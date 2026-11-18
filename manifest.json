@@ -1,9 +1,9 @@
 {
-  "name": "CloudRoblox M4",
+  "name": "CloudRoblox M4 Pro",
   "short_name": "CloudRoblox",
   "start_url": "./index.html",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#090b10",
-  "theme_color": "#090b10"
+  "background_color": "#07090e",
+  "theme_color": "#07090e"
 }
