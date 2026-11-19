@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
   <title>CloudRoblox M4 Pro</title>
-  <link rel="manifest" href="manifest.json?v=7" />
-  <link rel="stylesheet" href="style.css?v=7" />
+  <link rel="manifest" href="manifest.json?v=8" />
+  <link rel="stylesheet" href="style.css?v=8" />
 </head>
 <body>
   <!-- 1. Passcode Gate (262767) -->
@@ -38,16 +38,16 @@
       </div>
 
       <h1>Ready to Play</h1>
-      <p class="sub">Auto-connected to your Mac mini M4 • Fullscreen PC stream, desktop touch & native Roblox mobile controls.</p>
+      <p class="sub">Full Windows 11 touchscreen on mobile (Start Menu, Taskbar, Desktop & Roblox mobile controls) at 60 FPS.</p>
 
       <label for="qualitySelect">Stream Profile</label>
       <select id="qualitySelect">
-        <option value="1920,60,14000">Extreme • 1080p 60 FPS (14 Mbps)</option>
-        <option value="1600,60,9000" selected>Pro Balanced • HD+ 60 FPS (9 Mbps)</option>
-        <option value="1280,60,4500">5G Speed • 720p 60 FPS (4.5 Mbps)</option>
+        <option value="1920,60,15000">Extreme • 1080p 60 FPS (15 Mbps)</option>
+        <option value="1600,60,10000" selected>Pro Balanced • HD+ 60 FPS (10 Mbps)</option>
+        <option value="1280,60,5500">Ultra Fast • 720p 60 FPS (5.5 Mbps)</option>
       </select>
 
-      <button id="connectBtn" type="button" class="primary-btn">LAUNCH ROBLOX STREAM</button>
+      <button id="connectBtn" type="button" class="primary-btn">LAUNCH WINDOWS 11 & ROBLOX</button>
       <p id="statusText" class="status info"></p>
 
       <button id="toggleManualBtn" type="button" class="link-btn">Advanced: Manual Override URL</button>
@@ -55,7 +55,7 @@
         <input id="serverUrl" type="url" placeholder="https://your-tunnel.trycloudflare.com" autocomplete="off" />
       </div>
 
-      <p class="tip">iPad Safari: Tap <b>Share → Add to Home Screen</b> for full edge-to-edge gaming without Safari bars.</p>
+      <p class="tip">iPad/iPhone Safari: Tap <b>Share → Add to Home Screen</b> for full edge-to-edge Windows 11 without browser bars.</p>
     </div>
   </div>
 
@@ -73,13 +73,13 @@
     </div>
   </div>
 
-  <!-- 4. Fullscreen PC & Roblox Viewport -->
+  <!-- 4. Fullscreen Windows 11 & Roblox Touch Viewport -->
   <div id="streamContainer" class="stream-container hidden">
     <video id="remoteVideo" class="fit-contain" autoplay playsinline webkit-playsinline muted></video>
     <canvas id="streamCanvas" class="fit-contain hidden"></canvas>
     <div id="touchLayer" class="touch-layer"></div>
 
-    <!-- Collapsible CloudMoon HUD (Moves to top-right orb when collapsed so Roblox corners stay clear) -->
+    <!-- Collapsible Floating Windows 11 + Roblox Touch HUD -->
     <div id="hudPill" class="hud-pill">
       <button id="hudToggleBtn" type="button" class="icon-btn" title="Minimize HUD">◀</button>
       <div id="hudBody" class="hud-body">
@@ -88,13 +88,15 @@
         <span id="statPing">-- ms</span>
         <span class="sep">•</span>
         <span id="statFps">-- FPS</span>
-        <button id="openRobloxBtn" type="button" class="icon-btn roblox-btn" title="Open / Focus Roblox">🎮 Roblox</button>
-        <button id="fitModeBtn" type="button" class="icon-btn" title="Switch Fit / Edge-to-Edge Fill">Fill</button>
+        <button id="winStartBtn" type="button" class="icon-btn win-btn" title="Windows 11 Start Menu">⊞</button>
+        <button id="openRobloxBtn" type="button" class="icon-btn roblox-btn" title="Launch / Focus Roblox">🎮 Roblox</button>
+        <button id="inputModeBtn" type="button" class="icon-btn" title="Switch Touch / Mouse">👆</button>
+        <button id="rclickBtn" type="button" class="icon-btn" title="Right-Click at Touch">R-Click</button>
+        <button id="escBtn" type="button" class="icon-btn" title="ESC Key">ESC</button>
         <button id="f11Btn" type="button" class="icon-btn" title="PC Fullscreen (F11)">F11</button>
-        <button id="inputModeBtn" type="button" class="icon-btn" title="Toggle Touch / Mouse">👆</button>
-        <button id="escBtn" type="button" class="icon-btn" title="Roblox Menu (ESC)">ESC</button>
+        <button id="fitModeBtn" type="button" class="icon-btn" title="Fit Full Desktop / Fill Screen">Fill</button>
         <button id="audioBtn" type="button" class="icon-btn muted-pulse" title="Unmute Audio">🔇</button>
-        <button id="chatBtn" type="button" class="icon-btn" title="Type in Roblox Chat">⌨</button>
+        <button id="chatBtn" type="button" class="icon-btn" title="Keyboard / Roblox Chat">⌨</button>
         <button id="fullscreenBtn" type="button" class="icon-btn" title="Browser Fullscreen">⛶</button>
         <button id="disconnectBtn" type="button" class="icon-btn danger" title="Disconnect">✕</button>
       </div>
@@ -103,14 +105,15 @@
     <!-- Toast Notification -->
     <div id="toastBanner" class="toast hidden"></div>
 
-    <!-- Roblox Chat Quick-Type Bar -->
+    <!-- Windows Keyboard & Roblox Chat Bar -->
     <div id="chatBar" class="chat-bar hidden">
-      <input id="chatInput" type="text" placeholder="Type Roblox chat message & press Send..." />
-      <button id="sendChatBtn" type="button" class="primary-btn compact">SEND</button>
+      <input id="chatInput" type="text" placeholder="Type text for Windows or Roblox chat..." />
+      <button id="typeOnlyBtn" type="button" class="icon-btn">TYPE</button>
+      <button id="sendChatBtn" type="button" class="primary-btn compact">SEND ↵</button>
       <button id="closeChatBtn" type="button" class="icon-btn">✕</button>
     </div>
   </div>
 
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
