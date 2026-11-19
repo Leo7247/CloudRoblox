@@ -198,7 +198,7 @@ input, select {
   user-select: none;
 }
 
-/* Video, Canvas, and TouchLayer are dynamically locked to the exact same pixel box */
+/* Video, Canvas, and TouchLayer are dynamically pixel-locked to the exact same 1:1 rectangle */
 #remoteVideo, #streamCanvas {
   position: absolute;
   background: #000;
