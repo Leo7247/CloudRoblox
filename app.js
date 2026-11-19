@@ -1,14 +1,13 @@
 const SITE_PASSWORD = "262767";
 const BEACON_SUBSCRIBE_URL = "https://ntfy.sh/cloudroblox-leo7247-262767-rig/json?poll=1&since=latest";
-const WEBRTC_GRACE_MS = 9000;
+const WEBRTC_GRACE_MS = 5000;
 
 const ICE_SERVERS = [
-  { urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
+  { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] },
   {
     urls: [
       "turn:openrelay.metered.ca:80",
-      "turn:openrelay.metered.ca:443",
-      "turns:openrelay.metered.ca:443?transport=tcp"
+      "turn:openrelay.metered.ca:443"
     ],
     username: "openrelayproject",
     credential: "openrelayproject"
@@ -46,11 +45,13 @@ const hudPill = document.getElementById("hudPill");
 const statMode = document.getElementById("statMode");
 const statPing = document.getElementById("statPing");
 const statFps = document.getElementById("statFps");
+const winStartBtn = document.getElementById("winStartBtn");
 const openRobloxBtn = document.getElementById("openRobloxBtn");
-const fitModeBtn = document.getElementById("fitModeBtn");
-const f11Btn = document.getElementById("f11Btn");
 const inputModeBtn = document.getElementById("inputModeBtn");
+const rclickBtn = document.getElementById("rclickBtn");
 const escBtn = document.getElementById("escBtn");
+const f11Btn = document.getElementById("f11Btn");
+const fitModeBtn = document.getElementById("fitModeBtn");
 const audioBtn = document.getElementById("audioBtn");
 const hudToggleBtn = document.getElementById("hudToggleBtn");
 const hudBody = document.getElementById("hudBody");
@@ -58,6 +59,7 @@ const toastBanner = document.getElementById("toastBanner");
 const chatBtn = document.getElementById("chatBtn");
 const chatBar = document.getElementById("chatBar");
 const chatInput = document.getElementById("chatInput");
+const typeOnlyBtn = document.getElementById("typeOnlyBtn");
 const sendChatBtn = document.getElementById("sendChatBtn");
 const closeChatBtn = document.getElementById("closeChatBtn");
 
@@ -71,10 +73,12 @@ let intentionalClose = false;
 let isStreaming = false;
 let streamMode = "p2p";
 let inputMode = "touch";
-let fitMode = "contain"; // "contain" (full desktop) or "cover" (edge-to-edge fill)
+let fitMode = "contain"; // "contain" shows full PC screen including Start Menu & Taskbar
 let tunnelFramesCount = 0;
 let renderingFrame = false;
 let toastTimer = null;
+let lastTouchNorm = { x: 0.5, y: 0.5 };
+let longPressTimer = null;
 
 function showScreen(target) {
   [lockScreen, lobby, offlineScreen, streamContainer].forEach((el) => {
@@ -89,7 +93,7 @@ function showToast(text) {
   toastBanner.classList.remove("hidden");
   toastTimer = setTimeout(() => {
     toastBanner.classList.add("hidden");
-  }, 2500);
+  }, 2400);
 }
 
 toggleManualBtn.addEventListener("click", () => {
@@ -136,7 +140,7 @@ async function checkRigHealth() {
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 7000);
+  const timer = setTimeout(() => controller.abort(), 6000);
 
   try {
     const res = await fetch(`${targetUrl}/health`, {
@@ -207,14 +211,46 @@ document.getElementById("fullscreenBtn").addEventListener("click", () => {
   }
 });
 
-// Minimize HUD to top-right orb so Roblox top-left menu & controls stay completely clear
 hudToggleBtn.addEventListener("click", () => {
   const collapsed = hudBody.classList.toggle("hidden");
   hudPill.classList.toggle("minimized", collapsed);
   hudToggleBtn.textContent = collapsed ? "⚡" : "◀";
 });
 
-// Toggle Fit (Full Desktop) vs Fill (Edge-to-Edge Fullscreen)
+// Windows 11 Start Menu button
+winStartBtn.addEventListener("click", () => {
+  sendControlMessage({ t: "key", key: "win" });
+  showToast("Windows 11 Start Menu");
+});
+
+// Direct Launch RobloxPlayerBeta.exe
+openRobloxBtn.addEventListener("click", () => {
+  sendControlMessage({ t: "launch_roblox" });
+  showToast("Opening Roblox...");
+});
+
+// Toggle Native Multi-Touch (👆) vs Desktop Mouse (🖱️)
+inputModeBtn.addEventListener("click", () => {
+  inputMode = inputMode === "touch" ? "mouse" : "touch";
+  inputModeBtn.textContent = inputMode === "touch" ? "👆" : "🖱️";
+  showToast(inputMode === "touch" ? "Touch Mode: Windows 11 & Roblox Touch" : "Mouse Mode: Desktop Cursor");
+});
+
+// Right-click at last touch point
+rclickBtn.addEventListener("click", () => {
+  sendControlMessage({ t: "mouse", x: lastTouchNorm.x, y: lastTouchNorm.y, action: "rclick" });
+  showToast("Right-Click sent");
+});
+
+escBtn.addEventListener("click", () => {
+  sendControlMessage({ t: "key", key: "esc" });
+});
+
+f11Btn.addEventListener("click", () => {
+  sendControlMessage({ t: "key", key: "f11" });
+});
+
+// Fit (Full PC Screen incl. Start Menu & Taskbar) vs Fill (Edge-to-Edge)
 fitModeBtn.addEventListener("click", () => {
   fitMode = fitMode === "contain" ? "cover" : "contain";
   const cls = fitMode === "contain" ? "fit-contain" : "fit-cover";
@@ -223,30 +259,7 @@ fitModeBtn.addEventListener("click", () => {
   remoteVideo.classList.add(cls);
   streamCanvas.classList.add(cls);
   fitModeBtn.textContent = fitMode === "contain" ? "Fill" : "Fit";
-  showToast(fitMode === "cover" ? "Edge-to-Edge Fill Screen" : "Full Desktop Fit");
-});
-
-// Send F11 to make Roblox fullscreen on Windows 11 PC
-f11Btn.addEventListener("click", () => {
-  sendControlMessage({ t: "key", key: "f11" });
-});
-
-// One-tap Open / Focus Roblox
-openRobloxBtn.addEventListener("click", () => {
-  sendControlMessage({ t: "launch_roblox" });
-  showToast("Opening Roblox on Windows 11...");
-});
-
-// Switch between Native Multi-Touch (👆) and Desktop Mouse Click (🖱️)
-inputModeBtn.addEventListener("click", () => {
-  inputMode = inputMode === "touch" ? "mouse" : "touch";
-  inputModeBtn.textContent = inputMode === "touch" ? "👆" : "🖱️";
-  showToast(inputMode === "touch" ? "Touch Mode: Full Multi-Touch" : "Mouse Mode: Desktop Clicks");
-});
-
-// ESC key for Roblox menu
-escBtn.addEventListener("click", () => {
-  sendControlMessage({ t: "key", key: "esc" });
+  showToast(fitMode === "contain" ? "Full PC Screen (Start Menu & Taskbar)" : "Edge-to-Edge Fill");
 });
 
 audioBtn.addEventListener("click", () => {
@@ -286,18 +299,19 @@ function sendControlMessage(obj) {
   }
 }
 
-function sendChatMessage() {
+function sendTypedText(pressEnter) {
   const text = chatInput.value;
   if (text) {
-    sendControlMessage({ t: "chat", text });
+    sendControlMessage({ t: "text", text, enter: pressEnter });
   }
   chatInput.value = "";
   chatBar.classList.add("hidden");
 }
 
-sendChatBtn.addEventListener("click", sendChatMessage);
+typeOnlyBtn.addEventListener("click", () => sendTypedText(false));
+sendChatBtn.addEventListener("click", () => sendTypedText(true));
 chatInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") sendChatMessage();
+  if (e.key === "Enter") sendTypedText(true);
 });
 
 document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
@@ -538,7 +552,8 @@ async function initWebRTC() {
     }));
   };
 
-  const iceGatherTimer = setTimeout(sendOfferNow, 3000);
+  // Fast 600ms ICE gather timeout for 10-50ms local/metro connections
+  const iceGatherTimer = setTimeout(sendOfferNow, 600);
   pc.onicecandidate = (event) => {
     if (!event.candidate) {
       clearTimeout(iceGatherTimer);
@@ -584,10 +599,13 @@ function getNormalizedPoint(clientX, clientY) {
 }
 
 function sendTouchBatch(touchList, state) {
+  if (touchList.length > 0) {
+    lastTouchNorm = getNormalizedPoint(touchList[0].clientX, touchList[0].clientY);
+  }
+
   if (inputMode === "mouse") {
     if (touchList.length > 0) {
-      const t = touchList[0];
-      const { x, y } = getNormalizedPoint(t.clientX, t.clientY);
+      const { x, y } = lastTouchNorm;
       sendControlMessage({ t: "mouse", x, y, action: state });
     }
     return;
@@ -606,34 +624,48 @@ function sendTouchBatch(touchList, state) {
 
 touchLayer.addEventListener("touchstart", (e) => {
   e.preventDefault();
+  clearTimeout(longPressTimer);
   if (streamMode === "p2p" && remoteVideo.muted) {
     remoteVideo.muted = false;
     remoteVideo.volume = 1.0;
     remoteVideo.play().then(updateAudioButton).catch(() => {});
   }
   sendTouchBatch(e.changedTouches, "down");
+
+  // Long-press in Mouse mode triggers Windows right-click context menu
+  if (inputMode === "mouse" && e.touches.length === 1) {
+    const pt = getNormalizedPoint(e.touches[0].clientX, e.touches[0].clientY);
+    longPressTimer = setTimeout(() => {
+      sendControlMessage({ t: "mouse", x: pt.x, y: pt.y, action: "rclick" });
+      showToast("Right-Click");
+    }, 550);
+  }
 }, { passive: false });
 
 touchLayer.addEventListener("touchmove", (e) => {
   e.preventDefault();
+  clearTimeout(longPressTimer);
   sendTouchBatch(e.changedTouches, "move");
 }, { passive: false });
 
 touchLayer.addEventListener("touchend", (e) => {
   e.preventDefault();
+  clearTimeout(longPressTimer);
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
 touchLayer.addEventListener("touchcancel", (e) => {
   e.preventDefault();
+  clearTimeout(longPressTimer);
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
-// Trackpad / Mouse support
+// Trackpad / External Mouse support
 let mouseDown = false;
 touchLayer.addEventListener("mousedown", (e) => {
   mouseDown = true;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
+  lastTouchNorm = { x, y };
   sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "down" }] });
 });
 touchLayer.addEventListener("mousemove", (e) => {
@@ -647,6 +679,11 @@ window.addEventListener("mouseup", (e) => {
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
   sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "up" }] });
 });
+touchLayer.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
+  sendControlMessage({ t: "mouse", x, y, action: "wheel", dy: e.deltaY < 0 ? 120 : -120 });
+}, { passive: false });
 
 function startTelemetry() {
   clearInterval(statsTimer);
@@ -678,6 +715,7 @@ function startTelemetry() {
 
 function cleanupSession() {
   clearTimeout(webrtcFallbackTimer);
+  clearTimeout(longPressTimer);
   clearInterval(statsTimer);
   if (wakeLock) {
     wakeLock.release().catch(() => {});
