@@ -1,6 +1,6 @@
 const SITE_PASSWORD = "262767";
 const BEACON_SUBSCRIBE_URL = "https://ntfy.sh/cloudroblox-leo7247-262767-rig/json?poll=1&since=latest";
-const WEBRTC_GRACE_MS = 5000;
+const WEBRTC_GRACE_MS = 6500;
 
 const ICE_SERVERS = [
   { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] },
@@ -73,18 +73,43 @@ let intentionalClose = false;
 let isStreaming = false;
 let streamMode = "p2p";
 let inputMode = "touch";
-let fitMode = "contain"; // "contain" shows full PC screen including Start Menu & Taskbar
+let fitMode = "contain";
 let tunnelFramesCount = 0;
 let renderingFrame = false;
 let toastTimer = null;
 let lastTouchNorm = { x: 0.5, y: 0.5 };
 let longPressTimer = null;
 
+// Keep viewport matched to exact visible area above Safari's bottom bar so Windows Taskbar is always shown
+function syncViewportSize() {
+  const vv = window.visualViewport;
+  const w = vv ? vv.width : window.innerWidth;
+  const h = vv ? vv.height : window.innerHeight;
+  const top = vv ? vv.offsetTop : 0;
+  const left = vv ? vv.offsetLeft : 0;
+
+  streamContainer.style.width = `${w}px`;
+  streamContainer.style.height = `${h}px`;
+  streamContainer.style.top = `${top}px`;
+  streamContainer.style.left = `${left}px`;
+}
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", syncViewportSize);
+  window.visualViewport.addEventListener("scroll", syncViewportSize);
+}
+window.addEventListener("resize", syncViewportSize);
+window.addEventListener("orientationchange", () => setTimeout(syncViewportSize, 200));
+syncViewportSize();
+
 function showScreen(target) {
   [lockScreen, lobby, offlineScreen, streamContainer].forEach((el) => {
     el.classList.add("hidden");
   });
   target.classList.remove("hidden");
+  if (target === streamContainer) {
+    syncViewportSize();
+  }
 }
 
 function showToast(text) {
@@ -217,26 +242,22 @@ hudToggleBtn.addEventListener("click", () => {
   hudToggleBtn.textContent = collapsed ? "⚡" : "◀";
 });
 
-// Windows 11 Start Menu button
 winStartBtn.addEventListener("click", () => {
   sendControlMessage({ t: "key", key: "win" });
   showToast("Windows 11 Start Menu");
 });
 
-// Direct Launch RobloxPlayerBeta.exe
 openRobloxBtn.addEventListener("click", () => {
   sendControlMessage({ t: "launch_roblox" });
-  showToast("Opening Roblox...");
+  showToast("Launching Roblox...");
 });
 
-// Toggle Native Multi-Touch (👆) vs Desktop Mouse (🖱️)
 inputModeBtn.addEventListener("click", () => {
   inputMode = inputMode === "touch" ? "mouse" : "touch";
   inputModeBtn.textContent = inputMode === "touch" ? "👆" : "🖱️";
   showToast(inputMode === "touch" ? "Touch Mode: Windows 11 & Roblox Touch" : "Mouse Mode: Desktop Cursor");
 });
 
-// Right-click at last touch point
 rclickBtn.addEventListener("click", () => {
   sendControlMessage({ t: "mouse", x: lastTouchNorm.x, y: lastTouchNorm.y, action: "rclick" });
   showToast("Right-Click sent");
@@ -250,7 +271,6 @@ f11Btn.addEventListener("click", () => {
   sendControlMessage({ t: "key", key: "f11" });
 });
 
-// Fit (Full PC Screen incl. Start Menu & Taskbar) vs Fill (Edge-to-Edge)
 fitModeBtn.addEventListener("click", () => {
   fitMode = fitMode === "contain" ? "cover" : "contain";
   const cls = fitMode === "contain" ? "fit-contain" : "fit-cover";
@@ -391,7 +411,7 @@ async function startSession() {
     }
 
     if (msg.type === "auth_ok") {
-      statusText.textContent = "3/3 Connecting 60 FPS stream...";
+      statusText.textContent = "3/3 Establishing direct 60 FPS P2P link...";
       await initWebRTC();
       return;
     }
@@ -490,6 +510,28 @@ function applyMaxBitrate(sdp, maxKbps) {
   );
 }
 
+function waitForIceComplete(peerConn, timeoutMs = 2500) {
+  return new Promise((resolve) => {
+    if (peerConn.iceGatheringState === "complete") {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      peerConn.removeEventListener("icegatheringstatechange", onState);
+      resolve();
+    }, timeoutMs);
+
+    function onState() {
+      if (peerConn.iceGatheringState === "complete") {
+        clearTimeout(timer);
+        peerConn.removeEventListener("icegatheringstatechange", onState);
+        resolve();
+      }
+    }
+    peerConn.addEventListener("icegatheringstatechange", onState);
+  });
+}
+
 async function initWebRTC() {
   const [maxWidth, fps, maxKbps] = qualitySelect.value.split(",").map(Number);
 
@@ -538,40 +580,31 @@ async function initWebRTC() {
 
   webrtcFallbackTimer = setTimeout(switchToTunnelFallback, WEBRTC_GRACE_MS);
 
-  let offerSent = false;
-  const sendOfferNow = () => {
-    if (offerSent || !pc || !ws || ws.readyState !== WebSocket.OPEN) return;
-    offerSent = true;
-    const boostedSdp = applyMaxBitrate(pc.localDescription.sdp, maxKbps);
-    ws.send(JSON.stringify({
-      type: "offer",
-      sdp: boostedSdp,
-      sdpType: pc.localDescription.type,
-      maxWidth,
-      fps
-    }));
-  };
-
-  // Fast 600ms ICE gather timeout for 10-50ms local/metro connections
-  const iceGatherTimer = setTimeout(sendOfferNow, 600);
-  pc.onicecandidate = (event) => {
-    if (!event.candidate) {
-      clearTimeout(iceGatherTimer);
-      sendOfferNow();
-    }
-  };
-
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
+
+  // Wait for full ICE candidate gathering so Python aiortc receives all UDP/STUN/TURN paths
+  await waitForIceComplete(pc, 2500);
+
+  if (!pc || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const boostedSdp = applyMaxBitrate(pc.localDescription.sdp, maxKbps);
+  ws.send(JSON.stringify({
+    type: "offer",
+    sdp: boostedSdp,
+    sdpType: pc.localDescription.type,
+    maxWidth,
+    fps
+  }));
 }
 
-// Compute exact normalized (0..1) coordinates for both Fit (contain) and Fill (cover) modes
+// Compute exact normalized (0..1) coordinates directly against the active video/canvas box
 function getNormalizedPoint(clientX, clientY) {
-  const rect = touchLayer.getBoundingClientRect();
+  const activeEl = streamMode === "p2p" ? remoteVideo : streamCanvas;
+  const rect = activeEl.getBoundingClientRect();
   const vw = (streamMode === "p2p" ? remoteVideo.videoWidth : streamCanvas.width) || 16;
   const vh = (streamMode === "p2p" ? remoteVideo.videoHeight : streamCanvas.height) || 9;
-  const cw = rect.width;
-  const ch = rect.height;
+  const cw = rect.width || window.innerWidth;
+  const ch = rect.height || window.innerHeight;
 
   const videoRatio = vw / vh;
   const containerRatio = cw / ch;
@@ -632,7 +665,6 @@ touchLayer.addEventListener("touchstart", (e) => {
   }
   sendTouchBatch(e.changedTouches, "down");
 
-  // Long-press in Mouse mode triggers Windows right-click context menu
   if (inputMode === "mouse" && e.touches.length === 1) {
     const pt = getNormalizedPoint(e.touches[0].clientX, e.touches[0].clientY);
     longPressTimer = setTimeout(() => {
