@@ -1,6 +1,6 @@
 const SITE_PASSWORD = "262767";
 const BEACON_SUBSCRIBE_URL = "https://ntfy.sh/cloudroblox-leo7247-262767-rig/json?poll=1&since=latest";
-const WEBRTC_GRACE_MS = 5500;
+const WEBRTC_GRACE_MS = 9000;
 
 const ICE_SERVERS = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
@@ -42,11 +42,13 @@ const remoteVideo = document.getElementById("remoteVideo");
 const streamCanvas = document.getElementById("streamCanvas");
 const canvasCtx = streamCanvas.getContext("2d");
 const touchLayer = document.getElementById("touchLayer");
+const hudPill = document.getElementById("hudPill");
 const statMode = document.getElementById("statMode");
 const statPing = document.getElementById("statPing");
 const statFps = document.getElementById("statFps");
-const statBitrate = document.getElementById("statBitrate");
 const openRobloxBtn = document.getElementById("openRobloxBtn");
+const fitModeBtn = document.getElementById("fitModeBtn");
+const f11Btn = document.getElementById("f11Btn");
 const inputModeBtn = document.getElementById("inputModeBtn");
 const escBtn = document.getElementById("escBtn");
 const audioBtn = document.getElementById("audioBtn");
@@ -68,9 +70,9 @@ let wakeLock = null;
 let intentionalClose = false;
 let isStreaming = false;
 let streamMode = "p2p";
-let inputMode = "touch"; // "touch" (Roblox Mobile UI) or "mouse" (Desktop click)
+let inputMode = "touch";
+let fitMode = "contain"; // "contain" (full desktop) or "cover" (edge-to-edge fill)
 let tunnelFramesCount = 0;
-let tunnelBytesCount = 0;
 let renderingFrame = false;
 let toastTimer = null;
 
@@ -87,7 +89,7 @@ function showToast(text) {
   toastBanner.classList.remove("hidden");
   toastTimer = setTimeout(() => {
     toastBanner.classList.add("hidden");
-  }, 2600);
+  }, 2500);
 }
 
 toggleManualBtn.addEventListener("click", () => {
@@ -205,22 +207,41 @@ document.getElementById("fullscreenBtn").addEventListener("click", () => {
   }
 });
 
+// Minimize HUD to top-right orb so Roblox top-left menu & controls stay completely clear
 hudToggleBtn.addEventListener("click", () => {
   const collapsed = hudBody.classList.toggle("hidden");
-  hudToggleBtn.textContent = collapsed ? "▶" : "◀";
+  hudPill.classList.toggle("minimized", collapsed);
+  hudToggleBtn.textContent = collapsed ? "⚡" : "◀";
 });
 
-// One-tap Open / Focus Roblox on Windows 11
+// Toggle Fit (Full Desktop) vs Fill (Edge-to-Edge Fullscreen)
+fitModeBtn.addEventListener("click", () => {
+  fitMode = fitMode === "contain" ? "cover" : "contain";
+  const cls = fitMode === "contain" ? "fit-contain" : "fit-cover";
+  remoteVideo.classList.remove("fit-contain", "fit-cover");
+  streamCanvas.classList.remove("fit-contain", "fit-cover");
+  remoteVideo.classList.add(cls);
+  streamCanvas.classList.add(cls);
+  fitModeBtn.textContent = fitMode === "contain" ? "Fill" : "Fit";
+  showToast(fitMode === "cover" ? "Edge-to-Edge Fill Screen" : "Full Desktop Fit");
+});
+
+// Send F11 to make Roblox fullscreen on Windows 11 PC
+f11Btn.addEventListener("click", () => {
+  sendControlMessage({ t: "key", key: "f11" });
+});
+
+// One-tap Open / Focus Roblox
 openRobloxBtn.addEventListener("click", () => {
   sendControlMessage({ t: "launch_roblox" });
   showToast("Opening Roblox on Windows 11...");
 });
 
-// Switch between Native Roblox Multi-Touch (👆) and Desktop Mouse Click (🖱️)
+// Switch between Native Multi-Touch (👆) and Desktop Mouse Click (🖱️)
 inputModeBtn.addEventListener("click", () => {
   inputMode = inputMode === "touch" ? "mouse" : "touch";
   inputModeBtn.textContent = inputMode === "touch" ? "👆" : "🖱️";
-  showToast(inputMode === "touch" ? "Touch Mode: Roblox Mobile Controls" : "Mouse Mode: Desktop Clicks");
+  showToast(inputMode === "touch" ? "Touch Mode: Full Multi-Touch" : "Mouse Mode: Desktop Clicks");
 });
 
 // ESC key for Roblox menu
@@ -412,7 +433,7 @@ function switchToTunnelFallback() {
   if (isStreaming || intentionalClose) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-  statusText.textContent = "NAT blocked P2P UDP — switching to Direct Cloudflare Tunnel...";
+  statusText.textContent = "Switching to Direct Cloudflare Tunnel...";
   if (pc) {
     pc.close();
     pc = null;
@@ -430,8 +451,6 @@ async function handleBinaryFrame(buffer) {
   if (bytes.length < 2 || bytes[0] !== 1) return;
 
   tunnelFramesCount++;
-  tunnelBytesCount += bytes.byteLength;
-
   if (renderingFrame) return;
   renderingFrame = true;
 
@@ -531,7 +550,7 @@ async function initWebRTC() {
   await pc.setLocalDescription(offer);
 }
 
-// Compute exact normalized (0..1) coordinates inside whichever surface is active
+// Compute exact normalized (0..1) coordinates for both Fit (contain) and Fill (cover) modes
 function getNormalizedPoint(clientX, clientY) {
   const rect = touchLayer.getBoundingClientRect();
   const vw = (streamMode === "p2p" ? remoteVideo.videoWidth : streamCanvas.width) || 16;
@@ -543,7 +562,11 @@ function getNormalizedPoint(clientX, clientY) {
   const containerRatio = cw / ch;
 
   let renderW, renderH, offsetX, offsetY;
-  if (containerRatio > videoRatio) {
+  const useHeight = fitMode === "contain"
+    ? (containerRatio > videoRatio)
+    : (containerRatio < videoRatio);
+
+  if (useHeight) {
     renderH = ch;
     renderW = ch * videoRatio;
     offsetX = (cw - renderW) / 2;
@@ -606,32 +629,31 @@ touchLayer.addEventListener("touchcancel", (e) => {
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
-// Trackpad / External Mouse support on iPad
+// Trackpad / Mouse support
 let mouseDown = false;
 touchLayer.addEventListener("mousedown", (e) => {
   mouseDown = true;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "mouse", x, y, action: "down" });
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "down" }] });
 });
 touchLayer.addEventListener("mousemove", (e) => {
   if (!mouseDown) return;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "mouse", x, y, action: "move" });
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "move" }] });
 });
 window.addEventListener("mouseup", (e) => {
   if (!mouseDown) return;
   mouseDown = false;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "mouse", x, y, action: "up" });
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "up" }] });
 });
 
 function startTelemetry() {
   clearInterval(statsTimer);
   let lastFrames = 0;
-  let lastBytes = 0;
   let lastTime = performance.now();
 
-  statsTimer = setInterval(async () => {
+  statsTimer = setInterval(() => {
     const now = performance.now();
     const dt = (now - lastTime) / 1000;
 
@@ -644,23 +666,10 @@ function startTelemetry() {
         lastFrames = q.totalVideoFrames;
         if (fps > 0) statFps.textContent = `${fps} FPS`;
       }
-      if (pc) {
-        const stats = await pc.getStats();
-        stats.forEach((report) => {
-          if (report.type === "inbound-rtp" && report.kind === "video") {
-            const mbps = (((report.bytesReceived - lastBytes) * 8) / (dt * 1_000_000)).toFixed(1);
-            lastBytes = report.bytesReceived;
-            if (Number(mbps) >= 0) statBitrate.textContent = `${mbps} Mbps`;
-          }
-        });
-      }
     } else {
       const fps = Math.round(tunnelFramesCount / dt);
-      const mbps = ((tunnelBytesCount * 8) / (dt * 1_000_000)).toFixed(1);
       tunnelFramesCount = 0;
-      tunnelBytesCount = 0;
       statFps.textContent = `${fps} FPS`;
-      statBitrate.textContent = `${mbps} Mbps`;
     }
 
     lastTime = now;
@@ -679,6 +688,9 @@ function cleanupSession() {
   isStreaming = false;
   audioBtn.classList.remove("hidden");
   chatBar.classList.add("hidden");
+  hudPill.classList.remove("minimized");
+  hudBody.classList.remove("hidden");
+  hudToggleBtn.textContent = "◀";
   if (inputChannel) inputChannel.close();
   if (pc) pc.close();
   if (ws) ws.close();
