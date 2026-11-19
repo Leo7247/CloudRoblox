@@ -1,13 +1,14 @@
 const SITE_PASSWORD = "262767";
 const BEACON_SUBSCRIBE_URL = "https://ntfy.sh/cloudroblox-leo7247-262767-rig/json?poll=1&since=latest";
-const WEBRTC_GRACE_MS = 6500;
+const WEBRTC_GRACE_MS = 5500;
 
 const ICE_SERVERS = [
   { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] },
   {
     urls: [
       "turn:openrelay.metered.ca:80",
-      "turn:openrelay.metered.ca:443"
+      "turn:openrelay.metered.ca:443",
+      "turns:openrelay.metered.ca:443?transport=tcp"
     ],
     username: "openrelayproject",
     credential: "openrelayproject"
@@ -72,8 +73,8 @@ let wakeLock = null;
 let intentionalClose = false;
 let isStreaming = false;
 let streamMode = "p2p";
-let inputMode = "auto"; // "auto" (Desktop pointer on Windows + 10-finger touch in Roblox), "touch", "mouse"
-let fitMode = "contain";
+let inputMode = "auto";
+let fitMode = "contain"; // "contain" guarantees 100% full PC screen (including Start Menu & bottom Taskbar)
 let tunnelFramesCount = 0;
 let renderingFrame = false;
 let toastTimer = null;
@@ -81,26 +82,60 @@ let lastTouchNorm = { x: 0.5, y: 0.5 };
 let longPressTimer = null;
 let lastTwoFingerY = null;
 
-function syncViewportSize() {
+// Locks remoteVideo, streamCanvas, and touchLayer to the EXACT same pixel rectangle so touch is 100% 1:1
+function layoutStreamSurface() {
   const vv = window.visualViewport;
-  const w = vv ? vv.width : window.innerWidth;
-  const h = vv ? vv.height : window.innerHeight;
-  const top = vv ? vv.offsetTop : 0;
-  const left = vv ? vv.offsetLeft : 0;
+  const cw = vv ? vv.width : window.innerWidth;
+  const ch = vv ? vv.height : window.innerHeight;
+  const vTop = vv ? vv.offsetTop : 0;
+  const vLeft = vv ? vv.offsetLeft : 0;
 
-  streamContainer.style.width = `${w}px`;
-  streamContainer.style.height = `${h}px`;
-  streamContainer.style.top = `${top}px`;
-  streamContainer.style.left = `${left}px`;
+  streamContainer.style.width = `${cw}px`;
+  streamContainer.style.height = `${ch}px`;
+  streamContainer.style.top = `${vTop}px`;
+  streamContainer.style.left = `${vLeft}px`;
+
+  const vw = (streamMode === "p2p" ? remoteVideo.videoWidth : streamCanvas.width) || 16;
+  const vh = (streamMode === "p2p" ? remoteVideo.videoHeight : streamCanvas.height) || 10;
+
+  const videoRatio = vw / vh;
+  const containerRatio = cw / ch;
+
+  let renderW, renderH;
+  const useHeight = fitMode === "contain"
+    ? (containerRatio > videoRatio)
+    : (containerRatio < videoRatio);
+
+  if (useHeight) {
+    renderH = ch;
+    renderW = ch * videoRatio;
+  } else {
+    renderW = cw;
+    renderH = cw / videoRatio;
+  }
+
+  const left = Math.round((cw - renderW) / 2);
+  const top = Math.round((ch - renderH) / 2);
+  const width = Math.round(renderW);
+  const height = Math.round(renderH);
+
+  [remoteVideo, streamCanvas, touchLayer].forEach((el) => {
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.width = `${width}px`;
+    el.style.height = `${height}px`;
+  });
 }
 
 if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", syncViewportSize);
-  window.visualViewport.addEventListener("scroll", syncViewportSize);
+  window.visualViewport.addEventListener("resize", layoutStreamSurface);
+  window.visualViewport.addEventListener("scroll", layoutStreamSurface);
 }
-window.addEventListener("resize", syncViewportSize);
-window.addEventListener("orientationchange", () => setTimeout(syncViewportSize, 200));
-syncViewportSize();
+window.addEventListener("resize", layoutStreamSurface);
+window.addEventListener("orientationchange", () => setTimeout(layoutStreamSurface, 200));
+remoteVideo.addEventListener("loadedmetadata", layoutStreamSurface);
+remoteVideo.addEventListener("resize", layoutStreamSurface);
+layoutStreamSurface();
 
 function showScreen(target) {
   [lockScreen, lobby, offlineScreen, streamContainer].forEach((el) => {
@@ -108,7 +143,7 @@ function showScreen(target) {
   });
   target.classList.remove("hidden");
   if (target === streamContainer) {
-    syncViewportSize();
+    layoutStreamSurface();
   }
 }
 
@@ -283,12 +318,8 @@ f11Btn.addEventListener("click", () => {
 
 fitModeBtn.addEventListener("click", () => {
   fitMode = fitMode === "contain" ? "cover" : "contain";
-  const cls = fitMode === "contain" ? "fit-contain" : "fit-cover";
-  remoteVideo.classList.remove("fit-contain", "fit-cover");
-  streamCanvas.classList.remove("fit-contain", "fit-cover");
-  remoteVideo.classList.add(cls);
-  streamCanvas.classList.add(cls);
   fitModeBtn.textContent = fitMode === "contain" ? "Fill" : "Fit";
+  layoutStreamSurface();
   showToast(fitMode === "contain" ? "Full PC Screen (Start Menu & Taskbar)" : "Edge-to-Edge Fill");
 });
 
@@ -469,6 +500,7 @@ function activateStreamView(mode) {
   }
 
   showScreen(streamContainer);
+  layoutStreamSurface();
   requestWakeLock();
   startTelemetry();
 }
@@ -477,7 +509,7 @@ function switchToTunnelFallback() {
   if (isStreaming || intentionalClose) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-  statusText.textContent = "Switching to Direct Cloudflare Tunnel...";
+  statusText.textContent = "Switching to 60 FPS Direct Tunnel...";
   if (pc) {
     pc.close();
     pc = null;
@@ -495,21 +527,29 @@ async function handleBinaryFrame(buffer) {
   if (bytes.length < 2 || bytes[0] !== 1) return;
 
   tunnelFramesCount++;
-  if (renderingFrame) return;
+  if (renderingFrame) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(new Uint8Array([2]));
+    return;
+  }
   renderingFrame = true;
 
   try {
     const jpegBlob = new Blob([bytes.subarray(1)], { type: "image/jpeg" });
     const bitmap = await createImageBitmap(jpegBlob);
-    if (streamCanvas.width !== bitmap.width || streamCanvas.height !== bitmap.height) {
+    const sizeChanged = streamCanvas.width !== bitmap.width || streamCanvas.height !== bitmap.height;
+    if (sizeChanged) {
       streamCanvas.width = bitmap.width;
       streamCanvas.height = bitmap.height;
+      layoutStreamSurface();
     }
     canvasCtx.drawImage(bitmap, 0, 0);
     bitmap.close();
   } catch (_) {
   } finally {
     renderingFrame = false;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(new Uint8Array([2]));
+    }
   }
 }
 
@@ -606,36 +646,11 @@ async function initWebRTC() {
   }));
 }
 
+// Because touchLayer is locked to the exact video/canvas pixel box, normalized coords are 100% 1:1
 function getNormalizedPoint(clientX, clientY) {
-  const activeEl = streamMode === "p2p" ? remoteVideo : streamCanvas;
-  const rect = activeEl.getBoundingClientRect();
-  const vw = (streamMode === "p2p" ? remoteVideo.videoWidth : streamCanvas.width) || 16;
-  const vh = (streamMode === "p2p" ? remoteVideo.videoHeight : streamCanvas.height) || 9;
-  const cw = rect.width || window.innerWidth;
-  const ch = rect.height || window.innerHeight;
-
-  const videoRatio = vw / vh;
-  const containerRatio = cw / ch;
-
-  let renderW, renderH, offsetX, offsetY;
-  const useHeight = fitMode === "contain"
-    ? (containerRatio > videoRatio)
-    : (containerRatio < videoRatio);
-
-  if (useHeight) {
-    renderH = ch;
-    renderW = ch * videoRatio;
-    offsetX = (cw - renderW) / 2;
-    offsetY = 0;
-  } else {
-    renderW = cw;
-    renderH = cw / videoRatio;
-    offsetX = 0;
-    offsetY = (ch - renderH) / 2;
-  }
-
-  const x = Math.max(0, Math.min(1, (clientX - rect.left - offsetX) / renderW));
-  const y = Math.max(0, Math.min(1, (clientY - rect.top - offsetY) / renderH));
+  const rect = touchLayer.getBoundingClientRect();
+  const x = Math.max(0, Math.min(1, (clientX - rect.left) / (rect.width || 1)));
+  const y = Math.max(0, Math.min(1, (clientY - rect.top) / (rect.height || 1)));
   return { x, y };
 }
 
@@ -683,7 +698,6 @@ touchLayer.addEventListener("touchmove", (e) => {
   e.preventDefault();
   clearTimeout(longPressTimer);
 
-  // Two-finger vertical scroll in Mouse/Desktop mode
   if (inputMode === "mouse" && e.touches.length === 2 && lastTwoFingerY !== null) {
     const curY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
     const dy = curY - lastTwoFingerY;
