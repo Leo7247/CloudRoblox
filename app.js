@@ -72,15 +72,15 @@ let wakeLock = null;
 let intentionalClose = false;
 let isStreaming = false;
 let streamMode = "p2p";
-let inputMode = "touch";
+let inputMode = "auto"; // "auto" (Desktop pointer on Windows + 10-finger touch in Roblox), "touch", "mouse"
 let fitMode = "contain";
 let tunnelFramesCount = 0;
 let renderingFrame = false;
 let toastTimer = null;
 let lastTouchNorm = { x: 0.5, y: 0.5 };
 let longPressTimer = null;
+let lastTwoFingerY = null;
 
-// Keep viewport matched to exact visible area above Safari's bottom bar so Windows Taskbar is always shown
 function syncViewportSize() {
   const vv = window.visualViewport;
   const w = vv ? vv.width : window.innerWidth;
@@ -253,9 +253,19 @@ openRobloxBtn.addEventListener("click", () => {
 });
 
 inputModeBtn.addEventListener("click", () => {
-  inputMode = inputMode === "touch" ? "mouse" : "touch";
-  inputModeBtn.textContent = inputMode === "touch" ? "👆" : "🖱️";
-  showToast(inputMode === "touch" ? "Touch Mode: Windows 11 & Roblox Touch" : "Mouse Mode: Desktop Cursor");
+  if (inputMode === "auto") {
+    inputMode = "touch";
+    inputModeBtn.textContent = "👆Touch";
+    showToast("Forced Multi-Touch (Roblox Mobile UI)");
+  } else if (inputMode === "touch") {
+    inputMode = "mouse";
+    inputModeBtn.textContent = "🖱️Mouse";
+    showToast("Forced Desktop Pointer");
+  } else {
+    inputMode = "auto";
+    inputModeBtn.textContent = "⚡Auto";
+    showToast("Auto Mode: Desktop + Roblox Touch");
+  }
 });
 
 rclickBtn.addEventListener("click", () => {
@@ -411,7 +421,7 @@ async function startSession() {
     }
 
     if (msg.type === "auth_ok") {
-      statusText.textContent = "3/3 Establishing direct 60 FPS P2P link...";
+      statusText.textContent = "3/3 Establishing zero-latency 60 FPS stream...";
       await initWebRTC();
       return;
     }
@@ -510,7 +520,7 @@ function applyMaxBitrate(sdp, maxKbps) {
   );
 }
 
-function waitForIceComplete(peerConn, timeoutMs = 2500) {
+function waitForIceComplete(peerConn, timeoutMs = 2000) {
   return new Promise((resolve) => {
     if (peerConn.iceGatheringState === "complete") {
       resolve();
@@ -583,8 +593,7 @@ async function initWebRTC() {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  // Wait for full ICE candidate gathering so Python aiortc receives all UDP/STUN/TURN paths
-  await waitForIceComplete(pc, 2500);
+  await waitForIceComplete(pc, 2000);
 
   if (!pc || !ws || ws.readyState !== WebSocket.OPEN) return;
   const boostedSdp = applyMaxBitrate(pc.localDescription.sdp, maxKbps);
@@ -597,7 +606,6 @@ async function initWebRTC() {
   }));
 }
 
-// Compute exact normalized (0..1) coordinates directly against the active video/canvas box
 function getNormalizedPoint(clientX, clientY) {
   const activeEl = streamMode === "p2p" ? remoteVideo : streamCanvas;
   const rect = activeEl.getBoundingClientRect();
@@ -636,14 +644,6 @@ function sendTouchBatch(touchList, state) {
     lastTouchNorm = getNormalizedPoint(touchList[0].clientX, touchList[0].clientY);
   }
 
-  if (inputMode === "mouse") {
-    if (touchList.length > 0) {
-      const { x, y } = lastTouchNorm;
-      sendControlMessage({ t: "mouse", x, y, action: state });
-    }
-    return;
-  }
-
   const touches = [];
   for (let i = 0; i < touchList.length; i++) {
     const t = touchList[i];
@@ -651,7 +651,7 @@ function sendTouchBatch(touchList, state) {
     touches.push({ id: t.identifier, x, y, state });
   }
   if (touches.length > 0) {
-    sendControlMessage({ t: "touch", touches });
+    sendControlMessage({ t: "touch", mode: inputMode, touches });
   }
 }
 
@@ -663,53 +663,71 @@ touchLayer.addEventListener("touchstart", (e) => {
     remoteVideo.volume = 1.0;
     remoteVideo.play().then(updateAudioButton).catch(() => {});
   }
+
+  if (e.touches.length === 2) {
+    lastTwoFingerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+  }
+
   sendTouchBatch(e.changedTouches, "down");
 
-  if (inputMode === "mouse" && e.touches.length === 1) {
+  if (e.touches.length === 1) {
     const pt = getNormalizedPoint(e.touches[0].clientX, e.touches[0].clientY);
     longPressTimer = setTimeout(() => {
       sendControlMessage({ t: "mouse", x: pt.x, y: pt.y, action: "rclick" });
       showToast("Right-Click");
-    }, 550);
+    }, 600);
   }
 }, { passive: false });
 
 touchLayer.addEventListener("touchmove", (e) => {
   e.preventDefault();
   clearTimeout(longPressTimer);
+
+  // Two-finger vertical scroll in Mouse/Desktop mode
+  if (inputMode === "mouse" && e.touches.length === 2 && lastTwoFingerY !== null) {
+    const curY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    const dy = curY - lastTwoFingerY;
+    if (Math.abs(dy) > 8) {
+      lastTwoFingerY = curY;
+      sendControlMessage({ t: "mouse", x: lastTouchNorm.x, y: lastTouchNorm.y, action: "wheel", dy: dy > 0 ? 120 : -120 });
+    }
+    return;
+  }
+
   sendTouchBatch(e.changedTouches, "move");
 }, { passive: false });
 
 touchLayer.addEventListener("touchend", (e) => {
   e.preventDefault();
   clearTimeout(longPressTimer);
+  if (e.touches.length < 2) lastTwoFingerY = null;
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
 touchLayer.addEventListener("touchcancel", (e) => {
   e.preventDefault();
   clearTimeout(longPressTimer);
+  lastTwoFingerY = null;
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
-// Trackpad / External Mouse support
 let mouseDown = false;
 touchLayer.addEventListener("mousedown", (e) => {
   mouseDown = true;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
   lastTouchNorm = { x, y };
-  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "down" }] });
+  sendControlMessage({ t: "touch", mode: inputMode, touches: [{ id: 0, x, y, state: "down" }] });
 });
 touchLayer.addEventListener("mousemove", (e) => {
   if (!mouseDown) return;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "move" }] });
+  sendControlMessage({ t: "touch", mode: inputMode, touches: [{ id: 0, x, y, state: "move" }] });
 });
 window.addEventListener("mouseup", (e) => {
   if (!mouseDown) return;
   mouseDown = false;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "up" }] });
+  sendControlMessage({ t: "touch", mode: inputMode, touches: [{ id: 0, x, y, state: "up" }] });
 });
 touchLayer.addEventListener("wheel", (e) => {
   e.preventDefault();
