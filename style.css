@@ -190,7 +190,7 @@ input, select {
 .stream-container {
   position: fixed;
   inset: 0;
-  width: 100%;
+  width: 100vw;
   height: 100dvh;
   background: #000;
   touch-action: none;
@@ -199,12 +199,16 @@ input, select {
 }
 
 #remoteVideo, #streamCanvas {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
   background: #000;
   pointer-events: none;
 }
+
+.fit-contain { object-fit: contain; }
+.fit-cover { object-fit: cover; }
 
 .touch-layer {
   position: fixed;
@@ -215,7 +219,7 @@ input, select {
 
 .hud-pill {
   position: fixed;
-  top: max(10px, env(safe-area-inset-top));
+  top: max(8px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
@@ -224,7 +228,7 @@ input, select {
   gap: 6px;
   padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(12, 16, 26, 0.76);
+  background: rgba(12, 16, 26, 0.78);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -233,12 +237,22 @@ input, select {
   white-space: nowrap;
   max-width: 96vw;
   overflow-x: auto;
+  transition: all 0.2s ease;
+}
+
+/* When minimized, tuck into top-right corner so Roblox top-left menu is 100% clear */
+.hud-pill.minimized {
+  left: auto;
+  right: max(10px, env(safe-area-inset-right));
+  transform: none;
+  padding: 5px 8px;
+  opacity: 0.65;
 }
 
 .hud-body {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
 }
 
 .mode-tag {
@@ -281,7 +295,7 @@ input, select {
 
 .toast {
   position: fixed;
-  top: max(56px, calc(env(safe-area-inset-top) + 46px));
+  top: max(54px, calc(env(safe-area-inset-top) + 44px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -296,7 +310,7 @@ input, select {
 
 .chat-bar {
   position: fixed;
-  top: max(56px, calc(env(safe-area-inset-top) + 46px));
+  top: max(54px, calc(env(safe-area-inset-top) + 44px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
