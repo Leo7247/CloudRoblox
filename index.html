@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
   <title>CloudRoblox M4 Pro</title>
-  <link rel="manifest" href="manifest.json?v=10" />
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="manifest" href="manifest.json?v=11" />
+  <link rel="stylesheet" href="style.css?v=11" />
 </head>
 <body>
   <!-- 1. Passcode Gate (262767) -->
@@ -38,7 +38,7 @@
       </div>
 
       <h1>Ready to Play</h1>
-      <p class="sub">Zero-latency 60 FPS Windows 11 & Roblox stream with full Start Menu, Taskbar, and multi-touch support.</p>
+      <p class="sub">Full Windows 11 desktop (Start Menu, Taskbar, Desktop & Roblox mobile controls) at 60 FPS with 1:1 pixel touch.</p>
 
       <label for="qualitySelect">Stream Profile</label>
       <select id="qualitySelect">
@@ -55,7 +55,7 @@
         <input id="serverUrl" type="url" placeholder="https://your-tunnel.trycloudflare.com" autocomplete="off" />
       </div>
 
-      <p class="tip">Tip: Tap <b>Share → Add to Home Screen</b> in Safari for true edge-to-edge full screen with zero browser bars.</p>
+      <p class="tip">Tip: Turn off iPad VPN for direct 10 ms P2P, and tap <b>Share → Add to Home Screen</b> for edge-to-edge full screen.</p>
     </div>
   </div>
 
@@ -75,8 +75,8 @@
 
   <!-- 4. Fullscreen Windows 11 & Roblox Touch Viewport -->
   <div id="streamContainer" class="stream-container hidden">
-    <video id="remoteVideo" class="fit-contain" autoplay playsinline webkit-playsinline muted></video>
-    <canvas id="streamCanvas" class="fit-contain hidden"></canvas>
+    <video id="remoteVideo" autoplay playsinline webkit-playsinline muted></video>
+    <canvas id="streamCanvas" class="hidden"></canvas>
     <div id="touchLayer" class="touch-layer"></div>
 
     <!-- Collapsible Floating Windows 11 + Roblox Touch HUD -->
@@ -114,6 +114,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>
