@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
   <title>CloudRoblox M4 Pro</title>
-  <link rel="manifest" href="manifest.json?v=6" />
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="manifest" href="manifest.json?v=7" />
+  <link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
   <!-- 1. Passcode Gate (262767) -->
@@ -38,7 +38,7 @@
       </div>
 
       <h1>Ready to Play</h1>
-      <p class="sub">Auto-connected to your Mac mini M4 • Native 10-finger Roblox touch controls & one-tap game launch.</p>
+      <p class="sub">Auto-connected to your Mac mini M4 • Fullscreen PC stream, desktop touch & native Roblox mobile controls.</p>
 
       <label for="qualitySelect">Stream Profile</label>
       <select id="qualitySelect">
@@ -73,29 +73,29 @@
     </div>
   </div>
 
-  <!-- 4. Active Stream Viewport -->
+  <!-- 4. Fullscreen PC & Roblox Viewport -->
   <div id="streamContainer" class="stream-container hidden">
-    <video id="remoteVideo" autoplay playsinline webkit-playsinline muted></video>
-    <canvas id="streamCanvas" class="hidden"></canvas>
+    <video id="remoteVideo" class="fit-contain" autoplay playsinline webkit-playsinline muted></video>
+    <canvas id="streamCanvas" class="fit-contain hidden"></canvas>
     <div id="touchLayer" class="touch-layer"></div>
 
-    <!-- CloudMoon-Style Floating HUD Pill -->
+    <!-- Collapsible CloudMoon HUD (Moves to top-right orb when collapsed so Roblox corners stay clear) -->
     <div id="hudPill" class="hud-pill">
-      <button id="hudToggleBtn" type="button" class="icon-btn" title="Collapse HUD">◀</button>
+      <button id="hudToggleBtn" type="button" class="icon-btn" title="Minimize HUD">◀</button>
       <div id="hudBody" class="hud-body">
         <span class="dot"></span>
         <span id="statMode" class="mode-tag">P2P</span>
         <span id="statPing">-- ms</span>
         <span class="sep">•</span>
         <span id="statFps">-- FPS</span>
-        <span class="sep">•</span>
-        <span id="statBitrate">-- Mbps</span>
         <button id="openRobloxBtn" type="button" class="icon-btn roblox-btn" title="Open / Focus Roblox">🎮 Roblox</button>
-        <button id="inputModeBtn" type="button" class="icon-btn" title="Toggle Touch / Mouse Mode">👆</button>
-        <button id="escBtn" type="button" class="icon-btn" title="Send ESC Key">ESC</button>
+        <button id="fitModeBtn" type="button" class="icon-btn" title="Switch Fit / Edge-to-Edge Fill">Fill</button>
+        <button id="f11Btn" type="button" class="icon-btn" title="PC Fullscreen (F11)">F11</button>
+        <button id="inputModeBtn" type="button" class="icon-btn" title="Toggle Touch / Mouse">👆</button>
+        <button id="escBtn" type="button" class="icon-btn" title="Roblox Menu (ESC)">ESC</button>
         <button id="audioBtn" type="button" class="icon-btn muted-pulse" title="Unmute Audio">🔇</button>
         <button id="chatBtn" type="button" class="icon-btn" title="Type in Roblox Chat">⌨</button>
-        <button id="fullscreenBtn" type="button" class="icon-btn" title="Fullscreen">⛶</button>
+        <button id="fullscreenBtn" type="button" class="icon-btn" title="Browser Fullscreen">⛶</button>
         <button id="disconnectBtn" type="button" class="icon-btn danger" title="Disconnect">✕</button>
       </div>
     </div>
@@ -111,6 +111,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>
