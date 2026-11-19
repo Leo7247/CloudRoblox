@@ -158,9 +158,7 @@ input, select {
   text-decoration: underline;
 }
 
-.manual-box {
-  margin-top: 10px;
-}
+.manual-box { margin-top: 10px; }
 
 .status {
   margin: 12px 0 0;
@@ -219,7 +217,7 @@ input, select {
 
 .hud-pill {
   position: fixed;
-  top: max(8px, env(safe-area-inset-top));
+  top: max(6px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   z-index: 25;
@@ -228,19 +226,18 @@ input, select {
   gap: 6px;
   padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(12, 16, 26, 0.78);
+  background: rgba(12, 16, 26, 0.8);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.14);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  max-width: 96vw;
+  max-width: 97vw;
   overflow-x: auto;
   transition: all 0.2s ease;
 }
 
-/* When minimized, tuck into top-right corner so Roblox top-left menu is 100% clear */
 .hud-pill.minimized {
   left: auto;
   right: max(10px, env(safe-area-inset-right));
@@ -285,6 +282,11 @@ input, select {
   cursor: pointer;
 }
 
+.icon-btn.win-btn {
+  background: rgba(56, 189, 248, 0.28);
+  color: #7dd3fc;
+}
+
 .icon-btn.roblox-btn {
   background: linear-gradient(135deg, #2563eb, #0ea5e9);
   color: #fff;
@@ -295,7 +297,7 @@ input, select {
 
 .toast {
   position: fixed;
-  top: max(54px, calc(env(safe-area-inset-top) + 44px));
+  top: max(52px, calc(env(safe-area-inset-top) + 42px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -310,17 +312,17 @@ input, select {
 
 .chat-bar {
   position: fixed;
-  top: max(54px, calc(env(safe-area-inset-top) + 44px));
+  top: max(52px, calc(env(safe-area-inset-top) + 42px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: min(92vw, 480px);
+  gap: 6px;
+  width: min(94vw, 520px);
   padding: 8px 10px;
   border-radius: 16px;
-  background: rgba(15, 20, 32, 0.92);
+  background: rgba(15, 20, 32, 0.94);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.16);
 }
@@ -333,7 +335,7 @@ input, select {
 
 .primary-btn.compact {
   width: auto;
-  padding: 10px 16px;
+  padding: 10px 14px;
   border-radius: 10px;
   font-size: 13px;
 }
