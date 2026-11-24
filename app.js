@@ -1,14 +1,13 @@
 const SITE_PASSWORD = "262767";
 const BEACON_SUBSCRIBE_URL = "https://ntfy.sh/cloudroblox-leo7247-262767-rig/json?poll=1&since=latest";
-const WEBRTC_GRACE_MS = 4500;
+const WEBRTC_GRACE_MS = 6500;
 
 const ICE_SERVERS = [
   { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] },
   {
     urls: [
       "turn:openrelay.metered.ca:80",
-      "turn:openrelay.metered.ca:443",
-      "turns:openrelay.metered.ca:443?transport=tcp"
+      "turn:openrelay.metered.ca:443"
     ],
     username: "openrelayproject",
     credential: "openrelayproject"
@@ -73,70 +72,35 @@ let wakeLock = null;
 let intentionalClose = false;
 let isStreaming = false;
 let streamMode = "p2p";
-let inputMode = "auto";
-let fitMode = "contain"; // "contain" shows 100% of Windows 11 (Start Menu, Taskbar, and all windows)
+let inputMode = "touch";
+let fitMode = "contain";
 let tunnelFramesCount = 0;
 let renderingFrame = false;
 let toastTimer = null;
 let lastTouchNorm = { x: 0.5, y: 0.5 };
 let longPressTimer = null;
-let lastTwoFingerY = null;
 
-// Locks remoteVideo, streamCanvas, and touchLayer to the exact same 1:1 pixel box
-function layoutStreamSurface() {
+// Keep viewport matched to exact visible area above Safari's bottom bar so Windows Taskbar is always shown
+function syncViewportSize() {
   const vv = window.visualViewport;
-  const cw = vv ? vv.width : window.innerWidth;
-  const ch = vv ? vv.height : window.innerHeight;
-  const vTop = vv ? vv.offsetTop : 0;
-  const vLeft = vv ? vv.offsetLeft : 0;
+  const w = vv ? vv.width : window.innerWidth;
+  const h = vv ? vv.height : window.innerHeight;
+  const top = vv ? vv.offsetTop : 0;
+  const left = vv ? vv.offsetLeft : 0;
 
-  streamContainer.style.width = `${cw}px`;
-  streamContainer.style.height = `${ch}px`;
-  streamContainer.style.top = `${vTop}px`;
-  streamContainer.style.left = `${vLeft}px`;
-
-  const vw = (streamMode === "p2p" ? remoteVideo.videoWidth : streamCanvas.width) || 16;
-  const vh = (streamMode === "p2p" ? remoteVideo.videoHeight : streamCanvas.height) || 10;
-
-  const videoRatio = vw / vh;
-  const containerRatio = cw / ch;
-
-  let renderW, renderH;
-  const useHeight = fitMode === "contain"
-    ? (containerRatio > videoRatio)
-    : (containerRatio < videoRatio);
-
-  if (useHeight) {
-    renderH = ch;
-    renderW = ch * videoRatio;
-  } else {
-    renderW = cw;
-    renderH = cw / videoRatio;
-  }
-
-  const left = Math.round((cw - renderW) / 2);
-  const top = Math.round((ch - renderH) / 2);
-  const width = Math.round(renderW);
-  const height = Math.round(renderH);
-
-  [remoteVideo, streamCanvas, touchLayer].forEach((el) => {
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
-    el.style.width = `${width}px`;
-    el.style.height = `${height}px`;
-  });
+  streamContainer.style.width = `${w}px`;
+  streamContainer.style.height = `${h}px`;
+  streamContainer.style.top = `${top}px`;
+  streamContainer.style.left = `${left}px`;
 }
 
 if (window.visualViewport) {
-  window.visualViewport.addEventListener("resize", layoutStreamSurface);
-  window.visualViewport.addEventListener("scroll", layoutStreamSurface);
+  window.visualViewport.addEventListener("resize", syncViewportSize);
+  window.visualViewport.addEventListener("scroll", syncViewportSize);
 }
-window.addEventListener("resize", layoutStreamSurface);
-window.addEventListener("orientationchange", () => setTimeout(layoutStreamSurface, 200));
-remoteVideo.addEventListener("loadedmetadata", layoutStreamSurface);
-remoteVideo.addEventListener("resize", layoutStreamSurface);
-remoteVideo.addEventListener("playing", layoutStreamSurface);
-layoutStreamSurface();
+window.addEventListener("resize", syncViewportSize);
+window.addEventListener("orientationchange", () => setTimeout(syncViewportSize, 200));
+syncViewportSize();
 
 function showScreen(target) {
   [lockScreen, lobby, offlineScreen, streamContainer].forEach((el) => {
@@ -144,7 +108,7 @@ function showScreen(target) {
   });
   target.classList.remove("hidden");
   if (target === streamContainer) {
-    layoutStreamSurface();
+    syncViewportSize();
   }
 }
 
@@ -289,20 +253,9 @@ openRobloxBtn.addEventListener("click", () => {
 });
 
 inputModeBtn.addEventListener("click", () => {
-  sendControlMessage({ t: "release_all" });
-  if (inputMode === "auto") {
-    inputMode = "touch";
-    inputModeBtn.textContent = "👆Touch";
-    showToast("Forced Multi-Touch (Roblox Mobile UI)");
-  } else if (inputMode === "touch") {
-    inputMode = "mouse";
-    inputModeBtn.textContent = "🖱️Mouse";
-    showToast("Forced Desktop Pointer & Drag");
-  } else {
-    inputMode = "auto";
-    inputModeBtn.textContent = "⚡Auto";
-    showToast("Auto Mode: Window Drag + Roblox Touch");
-  }
+  inputMode = inputMode === "touch" ? "mouse" : "touch";
+  inputModeBtn.textContent = inputMode === "touch" ? "👆" : "🖱️";
+  showToast(inputMode === "touch" ? "Touch Mode: Windows 11 & Roblox Touch" : "Mouse Mode: Desktop Cursor");
 });
 
 rclickBtn.addEventListener("click", () => {
@@ -320,8 +273,12 @@ f11Btn.addEventListener("click", () => {
 
 fitModeBtn.addEventListener("click", () => {
   fitMode = fitMode === "contain" ? "cover" : "contain";
+  const cls = fitMode === "contain" ? "fit-contain" : "fit-cover";
+  remoteVideo.classList.remove("fit-contain", "fit-cover");
+  streamCanvas.classList.remove("fit-contain", "fit-cover");
+  remoteVideo.classList.add(cls);
+  streamCanvas.classList.add(cls);
   fitModeBtn.textContent = fitMode === "contain" ? "Fill" : "Fit";
-  layoutStreamSurface();
   showToast(fitMode === "contain" ? "Full PC Screen (Start Menu & Taskbar)" : "Edge-to-Edge Fill");
 });
 
@@ -379,17 +336,6 @@ chatInput.addEventListener("keydown", (e) => {
 
 document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive: false });
 document.addEventListener("gesturechange", (e) => e.preventDefault(), { passive: false });
-
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden && isStreaming) {
-    sendControlMessage({ t: "release_all" });
-  }
-});
-window.addEventListener("blur", () => {
-  if (isStreaming) {
-    sendControlMessage({ t: "release_all" });
-  }
-});
 
 async function requestWakeLock() {
   try {
@@ -465,7 +411,7 @@ async function startSession() {
     }
 
     if (msg.type === "auth_ok") {
-      statusText.textContent = "3/3 Establishing zero-latency 60 FPS stream...";
+      statusText.textContent = "3/3 Establishing direct 60 FPS P2P link...";
       await initWebRTC();
       return;
     }
@@ -503,12 +449,9 @@ function activateStreamView(mode) {
   if (mode === "p2p") {
     remoteVideo.classList.remove("hidden");
     streamCanvas.classList.add("hidden");
-    remoteVideo.muted = true;
-    remoteVideo.play().then(() => {
-      remoteVideo.muted = false;
-      remoteVideo.volume = 1.0;
-      updateAudioButton();
-    }).catch(updateAudioButton);
+    remoteVideo.muted = false;
+    remoteVideo.volume = 1.0;
+    remoteVideo.play().then(updateAudioButton).catch(updateAudioButton);
   } else {
     remoteVideo.classList.add("hidden");
     streamCanvas.classList.remove("hidden");
@@ -516,7 +459,6 @@ function activateStreamView(mode) {
   }
 
   showScreen(streamContainer);
-  layoutStreamSurface();
   requestWakeLock();
   startTelemetry();
 }
@@ -525,7 +467,7 @@ function switchToTunnelFallback() {
   if (isStreaming || intentionalClose) return;
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-  statusText.textContent = "Switching to High-Res 60 FPS Tunnel...";
+  statusText.textContent = "Switching to Direct Cloudflare Tunnel...";
   if (pc) {
     pc.close();
     pc = null;
@@ -542,21 +484,19 @@ async function handleBinaryFrame(buffer) {
   const bytes = new Uint8Array(buffer);
   if (bytes.length < 2 || bytes[0] !== 1) return;
 
+  tunnelFramesCount++;
   if (renderingFrame) return;
   renderingFrame = true;
 
   try {
     const jpegBlob = new Blob([bytes.subarray(1)], { type: "image/jpeg" });
     const bitmap = await createImageBitmap(jpegBlob);
-    const sizeChanged = streamCanvas.width !== bitmap.width || streamCanvas.height !== bitmap.height;
-    if (sizeChanged) {
+    if (streamCanvas.width !== bitmap.width || streamCanvas.height !== bitmap.height) {
       streamCanvas.width = bitmap.width;
       streamCanvas.height = bitmap.height;
-      layoutStreamSurface();
     }
     canvasCtx.drawImage(bitmap, 0, 0);
     bitmap.close();
-    tunnelFramesCount++;
   } catch (_) {
   } finally {
     renderingFrame = false;
@@ -570,7 +510,7 @@ function applyMaxBitrate(sdp, maxKbps) {
   );
 }
 
-function waitForIceComplete(peerConn, timeoutMs = 1500) {
+function waitForIceComplete(peerConn, timeoutMs = 2500) {
   return new Promise((resolve) => {
     if (peerConn.iceGatheringState === "complete") {
       resolve();
@@ -635,13 +575,7 @@ async function initWebRTC() {
   remoteVideo.srcObject = mediaStream;
 
   pc.ontrack = (event) => {
-    try {
-      if (event.receiver && "playoutDelayHint" in event.receiver) {
-        event.receiver.playoutDelayHint = 0;
-      }
-    } catch (_) {}
     mediaStream.addTrack(event.track);
-    layoutStreamSurface();
   };
 
   webrtcFallbackTimer = setTimeout(switchToTunnelFallback, WEBRTC_GRACE_MS);
@@ -649,7 +583,8 @@ async function initWebRTC() {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  await waitForIceComplete(pc, 1500);
+  // Wait for full ICE candidate gathering so Python aiortc receives all UDP/STUN/TURN paths
+  await waitForIceComplete(pc, 2500);
 
   if (!pc || !ws || ws.readyState !== WebSocket.OPEN) return;
   const boostedSdp = applyMaxBitrate(pc.localDescription.sdp, maxKbps);
@@ -662,17 +597,51 @@ async function initWebRTC() {
   }));
 }
 
-// Because touchLayer is locked to the exact video/canvas pixel box, normalized coords are 100% 1:1
+// Compute exact normalized (0..1) coordinates directly against the active video/canvas box
 function getNormalizedPoint(clientX, clientY) {
-  const rect = touchLayer.getBoundingClientRect();
-  const x = Math.max(0, Math.min(1, (clientX - rect.left) / (rect.width || 1)));
-  const y = Math.max(0, Math.min(1, (clientY - rect.top) / (rect.height || 1)));
+  const activeEl = streamMode === "p2p" ? remoteVideo : streamCanvas;
+  const rect = activeEl.getBoundingClientRect();
+  const vw = (streamMode === "p2p" ? remoteVideo.videoWidth : streamCanvas.width) || 16;
+  const vh = (streamMode === "p2p" ? remoteVideo.videoHeight : streamCanvas.height) || 9;
+  const cw = rect.width || window.innerWidth;
+  const ch = rect.height || window.innerHeight;
+
+  const videoRatio = vw / vh;
+  const containerRatio = cw / ch;
+
+  let renderW, renderH, offsetX, offsetY;
+  const useHeight = fitMode === "contain"
+    ? (containerRatio > videoRatio)
+    : (containerRatio < videoRatio);
+
+  if (useHeight) {
+    renderH = ch;
+    renderW = ch * videoRatio;
+    offsetX = (cw - renderW) / 2;
+    offsetY = 0;
+  } else {
+    renderW = cw;
+    renderH = cw / videoRatio;
+    offsetX = 0;
+    offsetY = (ch - renderH) / 2;
+  }
+
+  const x = Math.max(0, Math.min(1, (clientX - rect.left - offsetX) / renderW));
+  const y = Math.max(0, Math.min(1, (clientY - rect.top - offsetY) / renderH));
   return { x, y };
 }
 
 function sendTouchBatch(touchList, state) {
   if (touchList.length > 0) {
     lastTouchNorm = getNormalizedPoint(touchList[0].clientX, touchList[0].clientY);
+  }
+
+  if (inputMode === "mouse") {
+    if (touchList.length > 0) {
+      const { x, y } = lastTouchNorm;
+      sendControlMessage({ t: "mouse", x, y, action: state });
+    }
+    return;
   }
 
   const touches = [];
@@ -682,7 +651,7 @@ function sendTouchBatch(touchList, state) {
     touches.push({ id: t.identifier, x, y, state });
   }
   if (touches.length > 0) {
-    sendControlMessage({ t: "touch", mode: inputMode, touches });
+    sendControlMessage({ t: "touch", touches });
   }
 }
 
@@ -694,11 +663,6 @@ touchLayer.addEventListener("touchstart", (e) => {
     remoteVideo.volume = 1.0;
     remoteVideo.play().then(updateAudioButton).catch(() => {});
   }
-
-  if (e.touches.length === 2) {
-    lastTwoFingerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-  }
-
   sendTouchBatch(e.changedTouches, "down");
 
   if (inputMode === "mouse" && e.touches.length === 1) {
@@ -706,58 +670,46 @@ touchLayer.addEventListener("touchstart", (e) => {
     longPressTimer = setTimeout(() => {
       sendControlMessage({ t: "mouse", x: pt.x, y: pt.y, action: "rclick" });
       showToast("Right-Click");
-    }, 600);
+    }, 550);
   }
 }, { passive: false });
 
 touchLayer.addEventListener("touchmove", (e) => {
   e.preventDefault();
   clearTimeout(longPressTimer);
-
-  if (inputMode === "mouse" && e.touches.length === 2 && lastTwoFingerY !== null) {
-    const curY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-    const dy = curY - lastTwoFingerY;
-    if (Math.abs(dy) > 8) {
-      lastTwoFingerY = curY;
-      sendControlMessage({ t: "mouse", x: lastTouchNorm.x, y: lastTouchNorm.y, action: "wheel", dy: dy > 0 ? 120 : -120 });
-    }
-    return;
-  }
-
   sendTouchBatch(e.changedTouches, "move");
 }, { passive: false });
 
 touchLayer.addEventListener("touchend", (e) => {
   e.preventDefault();
   clearTimeout(longPressTimer);
-  if (e.touches.length < 2) lastTwoFingerY = null;
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
 touchLayer.addEventListener("touchcancel", (e) => {
   e.preventDefault();
   clearTimeout(longPressTimer);
-  lastTwoFingerY = null;
   sendTouchBatch(e.changedTouches, "up");
 }, { passive: false });
 
+// Trackpad / External Mouse support
 let mouseDown = false;
 touchLayer.addEventListener("mousedown", (e) => {
   mouseDown = true;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
   lastTouchNorm = { x, y };
-  sendControlMessage({ t: "touch", mode: inputMode, touches: [{ id: 0, x, y, state: "down" }] });
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "down" }] });
 });
 touchLayer.addEventListener("mousemove", (e) => {
   if (!mouseDown) return;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "touch", mode: inputMode, touches: [{ id: 0, x, y, state: "move" }] });
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "move" }] });
 });
 window.addEventListener("mouseup", (e) => {
   if (!mouseDown) return;
   mouseDown = false;
   const { x, y } = getNormalizedPoint(e.clientX, e.clientY);
-  sendControlMessage({ t: "touch", mode: inputMode, touches: [{ id: 0, x, y, state: "up" }] });
+  sendControlMessage({ t: "touch", touches: [{ id: 0, x, y, state: "up" }] });
 });
 touchLayer.addEventListener("wheel", (e) => {
   e.preventDefault();
@@ -781,16 +733,16 @@ function startTelemetry() {
         const q = remoteVideo.getVideoPlaybackQuality();
         const fps = Math.round((q.totalVideoFrames - lastFrames) / dt);
         lastFrames = q.totalVideoFrames;
-        statFps.textContent = `${Math.max(0, fps)} FPS`;
+        if (fps > 0) statFps.textContent = `${fps} FPS`;
       }
     } else {
       const fps = Math.round(tunnelFramesCount / dt);
       tunnelFramesCount = 0;
-      statFps.textContent = `${Math.max(0, fps)} FPS`;
+      statFps.textContent = `${fps} FPS`;
     }
 
     lastTime = now;
-  }, 500);
+  }, 1000);
 }
 
 function cleanupSession() {
