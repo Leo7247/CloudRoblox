@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CloudRoblox" />
   <title>CloudRoblox M4 Pro</title>
-  <link rel="manifest" href="manifest.json?v=13" />
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="manifest" href="manifest.json?v=9" />
+  <link rel="stylesheet" href="style.css?v=9" />
 </head>
 <body>
   <!-- 1. Passcode Gate (262767) -->
@@ -38,13 +38,13 @@
       </div>
 
       <h1>Ready to Play</h1>
-      <p class="sub">Full Windows 11 desktop (window dragging, Start Menu, Taskbar & iPad Roblox multi-touch) at 60 FPS.</p>
+      <p class="sub">Full Windows 11 touchscreen (Start Menu, Taskbar, Desktop & Roblox mobile controls) at 60 FPS.</p>
 
       <label for="qualitySelect">Stream Profile</label>
       <select id="qualitySelect">
-        <option value="2560,60,24000">Ultra Retina • 1440p 60 FPS (24 Mbps)</option>
-        <option value="1920,60,18000" selected>Extreme Full HD • 1080p 60 FPS (18 Mbps)</option>
-        <option value="1600,60,12000">Pro Balanced • 900p 60 FPS (12 Mbps)</option>
+        <option value="1920,60,16000">Extreme • 1080p 60 FPS (16 Mbps)</option>
+        <option value="1600,60,11000" selected>Pro Balanced • HD+ 60 FPS (11 Mbps)</option>
+        <option value="1280,60,6000">Ultra Fast • 720p 60 FPS (6 Mbps)</option>
       </select>
 
       <button id="connectBtn" type="button" class="primary-btn">LAUNCH WINDOWS 11 & ROBLOX</button>
@@ -55,7 +55,7 @@
         <input id="serverUrl" type="url" placeholder="https://your-tunnel.trycloudflare.com" autocomplete="off" />
       </div>
 
-      <p class="tip">Tip: Tap <b>Share → Add to Home Screen</b> in Safari for true edge-to-edge full screen with zero browser bars.</p>
+      <p class="tip">Tip: Tap <b>Share → Add to Home Screen</b> in Safari to remove all Safari bars for true edge-to-edge Windows 11.</p>
     </div>
   </div>
 
@@ -75,8 +75,8 @@
 
   <!-- 4. Fullscreen Windows 11 & Roblox Touch Viewport -->
   <div id="streamContainer" class="stream-container hidden">
-    <video id="remoteVideo" autoplay playsinline webkit-playsinline muted></video>
-    <canvas id="streamCanvas" class="hidden"></canvas>
+    <video id="remoteVideo" class="fit-contain" autoplay playsinline webkit-playsinline muted></video>
+    <canvas id="streamCanvas" class="fit-contain hidden"></canvas>
     <div id="touchLayer" class="touch-layer"></div>
 
     <!-- Collapsible Floating Windows 11 + Roblox Touch HUD -->
@@ -90,7 +90,7 @@
         <span id="statFps">-- FPS</span>
         <button id="winStartBtn" type="button" class="icon-btn win-btn" title="Windows 11 Start Menu">⊞</button>
         <button id="openRobloxBtn" type="button" class="icon-btn roblox-btn" title="Launch / Focus Roblox">🎮 Roblox</button>
-        <button id="inputModeBtn" type="button" class="icon-btn" title="Auto / Touch / Mouse">⚡Auto</button>
+        <button id="inputModeBtn" type="button" class="icon-btn" title="Switch Touch / Mouse">👆</button>
         <button id="rclickBtn" type="button" class="icon-btn" title="Right-Click at Touch">R-Click</button>
         <button id="escBtn" type="button" class="icon-btn" title="ESC Key">ESC</button>
         <button id="f11Btn" type="button" class="icon-btn" title="PC Fullscreen (F11)">F11</button>
@@ -114,6 +114,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
